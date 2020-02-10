@@ -11,12 +11,10 @@ L[1] <-1
 K[1] <- 0.1
 k[1] <- K[1]/L[1]
 
-k_star <- ((1-alpha)*beta/((1+beta)*(1+n) * (
-  1+ (beta * (1-delta))/((1+beta) * (1+n))
-)))^(1/(1-alpha))
+k_star <- ((1-alpha)*beta/((1+beta)*(1+n) - (1-delta)))^(1/(1-alpha))
 
 for(i in 2:t){
-  k[i] <- beta *((1-alpha)*k[i-1]^alpha - (1-delta) * k[i-1])/((1+beta)*(1+n))
+  k[i] <- (beta *(1-alpha)*k[i-1]^alpha + (1-delta) * k[i-1])/((1+beta)*(1+n))
   w[i] <- k[i]^alpha * (1-alpha) - (1-delta) * k[i]
   r[i] <- alpha * k[i] ^ (alpha-1) +1 - delta
   c_young[i] <- w[i]/(1+beta)
@@ -38,9 +36,9 @@ for(i in 2:t){
 
 ggplot(mapping = aes(x = 1:t))+
   geom_line(aes(y = k, color = 'k'))+
-  geom_line(aes(y = c_young, color = 'c_young'))+
-  geom_line(aes(y = c_old, color = 'c_old'))+
-  geom_line(aes(y = s, color = 's'))+
+  # geom_line(aes(y = c_young, color = 'c_young'))+
+  # geom_line(aes(y = c_old, color = 'c_old'))+
+  # geom_line(aes(y = s, color = 's'))+
   geom_line(aes(y = k_star), linetype = 2)
 
 
