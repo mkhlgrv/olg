@@ -1,0 +1,153 @@
+%!TEX TS-program = xelatex
+\documentclass[12pt,a4paper,oneside]{article}
+
+
+%%%%%%%%%% Математика %%%%%%%%%%
+\usepackage{amsmath,amsfonts,amssymb,amsthm,mathtools}
+\usepackage{upgreek}
+\usepackage{hyphenat}
+
+\usepackage[T4,T1]{fontenc}
+\makeatletter
+\newcommand{\do@openE}[1]{%
+  \mbox{\fontsize{#1}\z@\usefont{T4}{cmr}{m}{n}\symbol{130}}%
+}
+\newcommand{\openE}{\mathord{\mathchoice
+  {\do@openE\tf@size}
+  {\do@openE\tf@size}
+  {\do@openE\sf@size}
+  {\do@openE\ssf@size}
+}}
+\makeatother
+
+
+
+
+%%%%%%%%%% Шрифты %%%%%%%%
+\usepackage[english, russian]{babel} % выбор языка для документа
+\usepackage[utf8]{inputenc} % задание utf8 кодировки исходного tex файла
+\usepackage[X2,T2A]{fontenc} % кодировка
+
+\usepackage{fontspec} % пакет для подгрузки шрифтов
+%\setmainfont{Times New Roman} % задаёт основной шрифт документа
+
+\setmainfont[
+  Ligatures=TeX,
+  Extension=.otf,
+  BoldFont=cmunbx,
+  ItalicFont=cmunti,
+  BoldItalicFont=cmunbi,
+]{cmunrm}
+
+
+\usepackage{unicode-math} % пакет для установки математического шрифта
+\setmathfont{Asana-Math.otf} % шрифт для математики
+
+
+
+%%%%%%%%%% Работа с картинками %%%%%%%%%
+\usepackage{graphicx} % Для вставки рисунков
+\usepackage{graphics}
+\graphicspath{{images/}{pictures/}} % можно указать папки с картинками
+\usepackage{wrapfig} % Обтекание рисунков и таблиц текстом
+
+%%%%%%%%%% Работа с таблицами %%%%%%%%%%
+\usepackage{tabularx} % новые типы колонок
+\usepackage{tabulary} % и ещё новые типы колонок
+\usepackage{array,delarray} % Дополнительная работа с таблицами
+\usepackage{longtable} % Длинные таблицы
+\usepackage{multirow} % Слияние строк в таблице
+\usepackage{float} % возможность позиционировать объекты в нужном месте
+
+\usepackage{booktabs} % таблицы как в книгах
+% Заповеди из документации к booktabs:
+% 1. Будь проще! Глазам должно быть комфортно
+% 2. Не используйте вертикальные линни
+% 3. Не используйте двойные линии. Как правило, достаточно трёх горизонтальных линий
+% 4. Единицы измерения - в шапку таблицы
+% 5. Не сокращайте .1 вместо 0.1
+% 6. Повторяющееся значение повторяйте, а не говорите "то же"
+% 7. Есть сомнения? Выравнивай по левому краю!
+
+% вычисляемые колонки по tabularx
+\newcolumntype{C}{>{\centering\arraybackslash}X}
+\newcolumntype{L}{>{\raggedright\arraybackslash}X}
+\newcolumntype{Y}{>{\arraybackslash}X}
+\newcolumntype{Z}{>{\centering\arraybackslash}X}
+
+%%%%%%%%%% Графика и рисование %%%%%%%%%%
+\usepackage{tikz} % язык для рисования графики из latex'a
+
+%%%%%%%%%% Гиперссылки %%%%%%%%%%
+\usepackage{xcolor} % разные цвета
+
+\usepackage{hyperref}
+\hypersetup{
+unicode=true, % позволяет использовать юникодные символы
+colorlinks=true, % true - цветные ссылки, false - ссылки в рамках
+urlcolor =black, % цвет ссылки на url
+linkcolor=black, % внутренние ссылки
+citecolor=black, % на библиографию
+breaklinks % если ссылка не умещается в одну строку, разбивать ли ее на две части?
+}
+
+%%%%%%%%%% Другие приятные пакеты %%%%%%%%%
+\usepackage{multicol} % несколько колонок
+\usepackage{verbatim} % для многострочных комментариев
+\usepackage{cmap} % для кодировки шрифтов в pdf
+
+\usepackage{enumitem} % дополнительные плюшки для списков
+% например \begin{Enumerate}[resume] позволяет продолжить нумерацию в новом списке
+
+% \usepackage{todonotes} % для вставки в документ заметок о том, что осталось сделать
+% \todo{Здесь надо коэффициенты исправить}
+% \missingfigure{Здесь будет Последний день Помпеи}
+%
+ 
+%\listoftodos —- печатает все поставленные \todo'шки
+
+%%%%%%%%%% Список литературы %%%%%%%%%%
+
+ \usepackage[language=english,backend=biber,giveninits=true,style=authoryear]{biblatex}
+%\usepackage[language=russian,backend=biber,giveninits=true,style=authoryear]{biblatex}
+\renewcommand*{\nameyeardelim}{\addcomma\space}
+\addbibresource{bib_en.bib}
+% \addbibresource{bib.bib}
+\renewbibmacro{in:}{}
+
+\makeatletter
+\AtEveryBibitem{\global\undef\bbx@lasthash}
+\makeatother
+
+
+
+\usepackage[title,titletoc]{appendix}
+
+% \DeclareFieldFormat{labelnumberwidth}{#1)}
+
+\usepackage{titling}
+
+
+%%%%%%% Geometry %%%%%%%%
+\usepackage{geometry}
+\geometry{ a4paper,
+right = 20mm,
+ left= 40mm,
+ top=20mm,
+ bottom = 20mm
+ }
+ 
+ 
+ %%% Заголовки
+\usepackage[indentfirst]{titlesec}{\raggedleft}
+
+
+\usepackage{longtable}
+
+\usepackage{animate}[2017/05/18]
+\usepackage{graphicx}
+% Цветные комментарии
+% \usepackage{todonotes}
+\usepackage[disable]{todonotes}
+\reversemarginpar
+\setlength{\marginparwidth}{3.5cm}
