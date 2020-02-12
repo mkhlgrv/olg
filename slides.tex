@@ -1,0 +1,133 @@
+%!TEX TS-program = xelatex
+
+\documentclass[c, dvipsnames]{beamer}  % [t], [c], или [b] --- вертикальное 
+%\documentclass[handout, dvipsnames, c]{beamer} % Раздаточный материал (на слайдах всё сразу)
+\input{preamble_slides}
+\title[OLG]{Модели пересекающихся поколений (OLG)}
+
+
+\author[Михаил Гареев]{Михаил Гареев \\ \smallskip \scriptsize ЭО-15-01 \\ \smallskip \scriptsize \href{mailto:mkhlgrv@gmail.com}{\nolinkurl{mkhlgrv@gmail.com} }}
+
+\superviser{к.э.н. Полбин А.В.}
+
+\institute[РАНХиГС]{ \uppercase{
+ Российская Академия Народного Хозяйства и  \\ Государственной Службы при Президенте Российской Федерации}}
+\date{2020}
+
+
+\titlegraphic{\includegraphics[scale=0.5]{logo/logo_ranepa.png}}
+\titlegraphicii{\includegraphics[scale=0.5]{logo/logo_emit.png}}
+
+\begin{document}
+
+\frame[plain]{\titlepage}	% Титульный слайд
+
+
+\section{Возникновение и основная идея}
+
+\begin{frame}
+ \frametitle{\insertsection}
+    \begin{itemize}
+        \item Проблема: модели экономического роста первого поколения (модель Солоу) предполагают экзогенную норму сбережения.
+        \item Решение: модель, в которой сбережения формируются исходя из выбора экономических агентов:
+        \begin{itemize}
+        \item модель Рамсея --- Кааса --- Купманса (1963): бесконечно живущий агент выбирает уровень потребления и сбережения, максимизируя полезность;
+        \item модель пересекающихся поколений Даймонда (1965): в каждый момент времени существует несколько поколений, молодые работают и сберегают, пожилые тратят свои сбережения. 
+        \end{itemize}
+    \end{itemize}
+\end{frame}
+
+\section{Базовая модель 2-х поколений}
+\subsection{Предположения}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+     \begin{itemize}
+        \item дискретное время,
+        \item индивиды живут два периода,
+        \item полезность индивида $U_t = \ln(c_{1,t}) + \beta \ln(c_{2, t+1 })$,
+        \begin{itemize}
+            \item $c_{1,t}$ --- потребление молодого поколения,
+        \item $c_{2,t + 1}$ --- потребление пожилого поколения,
+        \item $\beta \in (0, 1)$ --- коэффициент временных предпочтений,
+        \end{itemize}
+        \item численность населения растёт с постоянным темпом $n$: $L_t = (1+n)^t L_0$,
+        \item индивиды работают только в первый период жизни, неэластично предлагая единицу труда и получая зарплату $w_t$,
+        
+    \end{itemize}
+
+\end{frame}
+
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+     \begin{itemize}
+     \item выпуск описывается функцией Кобба-Дугласа: $Y_t =F(K_t, L_t) = {K_t}^\alpha {L_t}^{1-\alpha}$
+        \item рынки факторов производства находятся в совершенной конкуренции,
+        \item обозначим $k_t = K_t/L_t$, $f(k_t) = F(K_t, 1)$, тогда рентная цена капитала, равная доходности сбережений $R_t = 1-\delta + f^{'}(k_t)$, где $\delta$ --- амортизация,
+        \item зарплата $w_t = f(k_t) - R_t k_t$,
+        \item единица сбережений $s_t$ без потерь трансформируется в единицу капитала $K_t$.
+    \end{itemize}
+
+\end{frame}
+
+\subsection{Задача потребителя}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+ \begin{itemize}
+     \item Уровень сбережений $s_t$ индивида из поколения $t$ --- это результат решения оптимизационной задачи:
+     \begin{align*}
+  \max_{c_{1, t}, {c_{2, t+1}, s_t}} \ln(c_{1,t}) &+ \beta \ln(c_{2, t+1 })\\
+  \intertext{при ограничениях:} 
+  c_{1,t} + s_t &\leq w_t, \\
+c_{2, t} &\leq R_{t+1} s_t.
+\end{align*}
+\item Условия первого порядка:
+\begin{equation*}
+    s_t = \frac{\beta}{1+\beta} w_t.
+\end{equation*}
+ \end{itemize}
+ 
+
+\end{frame}
+
+\subsection{Динамика капитала}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+ \begin{itemize}
+     \item Уровень капитала в момент времени $t+1$:
+     \begin{equation*}
+  K_{t+1} &= s_t L_t + (1-\delta) K_t.
+  \end{equation*}
+  \item Перейдём к капиталовооружённости на единицу труда:
+  \begin{align*}
+       k_{t+1} &= \frac{s_t}{1+n} + (1-\delta) \frac{k_t}{1+n};\\
+  k_{t+1} &= \frac{\beta w_t}{(1+\beta)(1+n)} + (1-\delta) \frac{k_t}{1+n};\\
+  k_{t+1} &=  \frac{\beta (1-\alpha) k_{t}^\alpha + (1-\delta)  k_t}{(1+\beta)(1+n)}.
+  \end{align*}
+ 
+  \item В устойчивом состоянии капиталовооружённость не меняется: $k^{*} = k_{t+1} = k_{t}$:
+  \begin{equation*}
+  k^{*} &= \left[\frac{\beta (1-\alpha)}{(1+\beta)(1+n) - (1-\delta)}\right]^{\left(\frac{1}{1-\alpha}\right)}
+ \end{equation*}
+\end{itemize}
+ 
+
+\end{frame}
+
+\subsection{Динамическая неэффективность}
+
+
+\section{Модель 3-х поколений}
+\subsection{Предпосылки}
+\subsection{Решение}
+\subsection{Симуляция}
+% усложнение модели
+% вечная молодость 
+% эндогенная рождаемость
+% многомерное население + симуляция
+
+
+\end{document}
