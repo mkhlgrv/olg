@@ -113,7 +113,7 @@ capital <- function(k, alpha = 0.5, beta = 0.8, d = 1, n = 0.01, delta = 0.9){
   )
 }
 # f(k*) = 0
-curve(capital(x), 0,.5)
+curve(delta(x), 0,.5)
 abline(h = 0, lty = 3)
 # находим корни
 capital_ss <- uniroot(capital, c(1/10^100, 1))$root
@@ -175,6 +175,7 @@ update.path <- function(capital,
                         beta = 0.8,
                         d = 1,
                         n = 0.01,
+                        capital0 = 0.1,
                         delta = 0.9,
                         Time = 200
 ){
@@ -243,6 +244,12 @@ update.path <- function(capital,
   
   return(
     data.frame(step,
+               alpha,
+               beta,
+               d,
+               n,
+               delta,
+               capital0,
                t = 1:Time,
                s_young, s_medium, c_young,
                c_medium, c_old, w, R,
@@ -326,6 +333,12 @@ get.path <- function(alpha = 0.5,
   # R=numeric(),
   # capital=numeric() )
   paths <- data.frame(step = 0,
+                      alpha = alpha,
+                      beta = beta,
+                      d = d,
+                      n = n,
+                      delta = delta,
+                      capital0 = capital0,
                       t = 1:Time,
                       s_young=NA,
                       s_medium=NA,
@@ -341,7 +354,7 @@ get.path <- function(alpha = 0.5,
                    update.path(capital = paths$capital[which(paths$step == step - 1)],
                                step=step, eta = eta,
                                alpha = alpha,
-                               
+                               capital0 = capital0,
                                beta = beta,
                                d = d,
                                n = n,
@@ -359,12 +372,29 @@ get.path <- function(alpha = 0.5,
               capital_linear=capital,
               paths=paths))
 }
-out <- get.path(tol = 0.00001, eta = 0.8, capital0 = 0.01, delta = 1, Time =30)
-ggplot(na.omit(out$paths))+
-  geom_line(aes(x=t, y = capital, alpha = factor(step)), show.legend = FALSE)
+out <- c(0.1, 0.05, 0.001) %>%
+  map_dfr(function(capital0){get.path(tol = 0.00001, eta = 0.8, capital0 = capital0, delta = 1, Time =30)}$paths)
+ggplot(out)+
+  geom_line(aes(x=t, y = capital, alpha = factor(step),
+                color = factor(capital0)), show.legend = FALSE)
 ggplot(na.omit(out$paths))+
   geom_line(aes(x=t, y = c_young, alpha = factor(step)), show.legend = FALSE)
 
 
+out <- expand.grid(alpha = c(0.4, 0.5, 0.6),
+                   beta = c(0.9, 0.5, 0.1),
+                   d = c(0.5, 1, 10),
+                   n = c(0, 0.01),
+                   delta = c(0.5, 1),
+                   capital0 = 0.001) %>%
+  map_dfr(function(capital0){get.path(tol = 0.00001,
+                                      eta = 0.8,
+                                      alpha = x$alpha,
+                                      beta = x$beta,
+                                      d = x$d,
+                                      n = x$n,
+                                      delta = x$delta,
+                                      capital0 = x$capital0,
+                                      Time =30)}$paths)
 #rm(list=ls())
 
