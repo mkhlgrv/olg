@@ -3,7 +3,7 @@
 \documentclass[c, dvipsnames]{beamer}  % [t], [c], или [b] --- вертикальное 
 %\documentclass[handout, dvipsnames, c]{beamer} % Раздаточный материал (на слайдах всё сразу)
 \input{preamble_slides}
-\title[OLG]{Модели пересекающихся поколений (OLG)}
+\title[OLG-модели]{Модели пересекающихся поколений (OLG)}
 
 
 \author[Михаил Гареев]{Михаил Гареев \\ \smallskip \scriptsize ЭО-15-01 \\ \smallskip \scriptsize \href{mailto:mkhlgrv@gmail.com}{\nolinkurl{mkhlgrv@gmail.com} }}
@@ -43,16 +43,16 @@
  \frametitle{\insertsection}
  \framesubtitle{\insertsubsection}
      \begin{itemize}
-        \item дискретное время,
-        \item индивиды живут два периода,
-        \item полезность индивида $U_t = \ln(c_{1,t}) + \beta \ln(c_{2, t+1 })$,
+        \item Дискретное время;
+        \item Индивиды живут два периода;
+        \item Полезность индивида $U_t = \ln(c_{1,t}) + \beta \ln(c_{2, t+1 })$,
         \begin{itemize}
             \item $c_{1,t}$ --- потребление молодого поколения,
         \item $c_{2,t + 1}$ --- потребление пожилого поколения,
         \item $\beta \in (0, 1)$ --- коэффициент временных предпочтений,
         \end{itemize}
-        \item численность населения растёт с постоянным темпом $n$: $L_t = (1+n)^t L_0$,
-        \item индивиды работают только в первый период жизни, неэластично предлагая единицу труда и получая зарплату $w_t$,
+        \item Численность населения растёт с постоянным темпом $n$: $L_t = (1+n)^t L_0$;
+        \item Индивиды работают только в первый период жизни, неэластично предлагая единицу труда и получая зарплату $w_t$.
         
     \end{itemize}
 
@@ -62,16 +62,16 @@
  \frametitle{\insertsection}
  \framesubtitle{\insertsubsection}
      \begin{itemize}
-     \item выпуск описывается функцией Кобба-Дугласа: $Y_t =F(K_t, L_t) = {K_t}^\alpha {L_t}^{1-\alpha}$
-        \item рынки факторов производства находятся в совершенной конкуренции,
-        \item обозначим $k_t = K_t/L_t$, $f(k_t) = F(K_t, 1)$, тогда рентная цена капитала, равная доходности сбережений $R_t = 1-\delta + f^{'}(k_t)$, где $\delta$ --- амортизация,
-        \item зарплата $w_t = f(k_t) - R_t k_t$,
-        \item единица сбережений $s_t$ без потерь трансформируется в единицу капитала $K_t$.
+     \item Выпуск описывается функцией Кобба --- Дугласа: $Y_t =F(K_t, L_t) = {K_t}^\alpha {L_t}^{1-\alpha}$;
+        \item Рынки факторов производства находятся в совершенной конкуренции;
+        \item Обозначим $k_t = K_t/L_t$, $f(k_t) = F(K_t, 1)$, тогда рентная цена капитала, равная доходности сбережений $R_t = 1-\delta + f^{'}(k_t)$, где $\delta$ --- амортизация;
+        \item Зарплата $w_t = f(k_t) - R_t k_t$;
+        \item Единица сбережений $s_t$ без потерь трансформируется в единицу капитала $K_t$.
     \end{itemize}
 
 \end{frame}
 
-\subsection{Задача потребителя}
+\subsection{Задача индивида}
 \begin{frame}
  \frametitle{\insertsection}
  \framesubtitle{\insertsubsection}
@@ -101,7 +101,7 @@ c_{2, t} &\leq R_{t+1} s_t.
      \begin{equation*}
   K_{t+1} &= s_t L_t + (1-\delta) K_t.
   \end{equation*}
-  \item Перейдём к капиталовооружённости на единицу труда:
+  \item Капиталовооружённость единицы труда:
   \begin{align*}
        k_{t+1} &= \frac{s_t}{1+n} + (1-\delta) \frac{k_t}{1+n};\\
   k_{t+1} &= \frac{\beta w_t}{(1+\beta)(1+n)} + (1-\delta) \frac{k_t}{1+n};\\
@@ -117,17 +117,148 @@ c_{2, t} &\leq R_{t+1} s_t.
 
 \end{frame}
 
-\subsection{Динамическая неэффективность}
+% \subsection{Динамическая неэффективность}
 
 
 \section{Модель 3-х поколений}
-\subsection{Предпосылки}
-\subsection{Решение}
-\subsection{Симуляция}
-% усложнение модели
-% вечная молодость 
-% эндогенная рождаемость
-% многомерное население + симуляция
+\subsection{Предположения}
+\begin{frame}[shrink=5]
 
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+     \begin{itemize}
+        \item Дискретное время;
+        \item Индивиды живут три периода;
+        \item Полезность индивида из поколения $\tau$ $U_\tau = \ln(c_{\tau,\tau}) + \beta \ln(c_{\tau, \tau+1 })+\beta^2\ln(c_{\tau, \tau+2 }) $, где:
+        \begin{itemize}
+        \item $c_{\tau,\tau} \equiv c_\tau^y $ --- потребление молодого поколения в период времени $\tau$,
+        \item $c_{\tau,\tau+1} \equiv c_{\tau+1}t^m$ --- потребление среднего поколения в период времени $\tau+1$,
+        \item $c_{\tau,\tau+2} \equiv c_{\tau+2}t^o$ --- потребление пожилого поколения в период времени $\tau+2$,
+        \item $\beta \in (0, 1)$ --- коэффициент временных предпочтений;
+        \end{itemize}
+        \item Численность поколения $\tau$ в момент времени $t$:
+        \begin{equation}
+            N_{\tau,t} =  \begin{cases}
+            (1+n)^\tau N_0,& \text{если } \tau \leq t + 2,\\
+            0, & \text{если } \tau > t+ 2;
+        \end{cases}
+        \end{equation}
+        \item Численность населения в момент времени $t$: 
+        \begin{equation}
+            \widetilde{N_t} = N_{t-2, t} + N_{t-1, t}+ N{t, t} = (1+n)^{t-2}N_0 + (1+n)^{t-1}N_0+(1+n)^t N_0.
+        \end{equation}
+        
+    \end{itemize}
+    
+    
+
+\end{frame}
+
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+     \begin{itemize}
+     \item Индивиды работают два первых периода жизни: молодому поколению доступна единица труда, среднему поколению доступно $d>0$ труда;
+        \item Предложение труда неэластично. Индивиды предлагают весь доступный труд и получают зарплату $w_t$: 
+        \begin{equation}
+            L_t =  N_{t-1, t}+ N{t, t} = (1+n)^{t-1}N_0+(1+n)^t N_0;
+        \end{equation}
+     \item Выпуск описывается функцией Кобба-Дугласа: $Y_t =F(K_t, L_t) = {K_t}^\alpha {L_t}^{1-\alpha}$;
+        \item Рынки факторов производства находятся в совершенной конкуренции;
+        \item Рентная цена капитала $R_t = 1-\delta + f^{'}(k_t)$;
+        \item Зарплата $w_t = f(k_t) - R_t k_t$;
+        \item Единица сбережений $s_t$ без потерь трансформируется в единицу капитала $K_t$.
+    \end{itemize}
+
+\end{frame}
+
+\subsection{Задача индивида}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+ \begin{itemize}
+     \item Уровень сбережений $s_{\tau, t}$ индивида из поколения $\tau$ в момент времени $t$ --- это результат решения оптимизационной задачи:
+     \begin{align*}
+  \max_{c_{1, t}, {c_{2, t+1}, s_t}} &
+\ln(c_{\tau,\tau}) + \beta \ln(c_{\tau, \tau+1 })+\beta^2\ln(c_{\tau, \tau+2 })\\
+\intertext{при ограничениях:} 
+    c_{\tau,\tau} + s_{\tau,\tau} &\leq w_\tau, \\
+    c_{\tau,\tau+1} + s_{\tau,\tau+1} &\leq d w_{\tau+1} + R_{\tau+1} s_{\tau,\tau},\\
+    c_{\tau,\tau+2} &\leq R_{t+2} s_{\tau,\tau+1}.
+\end{align*}
+\item Условия первого порядка:
+\begin{equation*}
+    s_t = \frac{\beta}{1+\beta} w_t.
+\end{equation*}
+ \end{itemize}
+\end{frame}
+
+
+\subsection{Накопление капитала}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+ \begin{itemize}
+     \item Уровень капиталовооружённости в момент времени $t+1$:
+\begin{align*}
+k_{t+1}& = \frac{c_t^y}{1+n+d}+ \frac{c_t^m}{(1+n)(1+n+d)} + k_t \frac{1-\delta}{1+n},\\
+\intertext{где: }
+c_t^y &= w_t (1+\beta) \beta - \frac{w_{t+1} d}{R_{t+1} (1+\beta+\beta^2)},\\
+ s_t^m &= \frac{\beta^2(d w_t + (w_{t-1} R_t)) - w_t d }{1+\beta+\beta^2}.
+\end{align*}
+ \end{itemize}
+\end{frame}
+
+\subsection{Решение}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+\begin{itemize}
+    \item Аналитическое решение невозможно, приходится использовать численные методы.
+    \item Алгоритм:
+    \begin{enumerate}
+                \item Численно находится капиталовооружённость в устойчивом состоянии $k^{*}: k_{t+1} = k_t$;
+    \item Находится первое приближение (линейный тренд от $k_0$ до $k_T = k^{*}$);
+    \item Для каждого момента времени $t \in (0, T)$ при известных капитале и труде рассчитываются цены факторов производства $R_t, w_t$;
+    \item При известных ценах на факторы рассчитываются потребление и сбережения;
+    \item При известных сбережениях формируется новая траектория капиталовооружённости, которая прибавляется к предыдущей с шагом $\eta$;
+    \item Процедура повторяется с шага 3, пока разница между моделями не окажется меньше заданного уровня $\zeta$.
+    \end{enumerate}
+
+    
+\end{itemize}
+\end{frame}
+
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+
+\begin{figure}
+    \centering
+    \includegraphics{}
+    \caption{Caption}
+    \label{fig:my_label}
+\end{figure}
+\end{frame}
+
+
+\subsection{Симуляция}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+
+\end{frame}
+\subsection{Планы}
+\begin{frame}
+ \frametitle{\insertsection}
+ \framesubtitle{\insertsubsection}
+\begin{itemize}
+    \item Добавление налогов;
+    \item Гетерогенные поколения;
+    \item Увеличение числа поколений;
+    \item Добавление досуга в функцию полезности, эластичное предложение труда, моделирование изменения пенсионного возраста;
+    \item Открытая экономика.
+\end{itemize}
+\end{frame}
 
 \end{document}
