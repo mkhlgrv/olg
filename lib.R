@@ -45,6 +45,7 @@ library(tables)
 
 # Math ----
 library(rootSolve)
+library(flexsurv)
 
 # Econometrics&ML ----
 library(gnm) 
@@ -63,3 +64,4 @@ library(glmnet)
 # Utilities ----
 library(rbenchmark)
 library(parallel) 
+library(miceadds)

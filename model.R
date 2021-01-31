@@ -113,7 +113,7 @@ capital <- function(k, alpha = 0.5, beta = 0.8, d = 1, n = 0.01, delta = 0.9){
   )
 }
 # f(k*) = 0
-curve(delta(x), 0,.5)
+curve(delta(x,  alpha = 0.6, beta =0.9, d= 0.5, n= 0, delta = 1), 0,.5)
 abline(h = 0, lty = 3)
 # находим корни
 capital_ss <- uniroot(capital, c(1/10^100, 1))$root
@@ -372,8 +372,37 @@ get.path <- function(alpha = 0.5,
               capital_linear=capital,
               paths=paths))
 }
-out <- c(0.1, 0.05, 0.001) %>%
-  map_dfr(function(capital0){get.path(tol = 0.00001, eta = 0.8, capital0 = capital0, delta = 1, Time =30)}$paths)
+out <- get.path(tol = 0.000001, eta = 0.8, capital0 = 0.05,n=0.05, alpha = 0.5,delta = 1, Time =30)
+# output
+(out$paths %>% filter(step == max(step)) %>% .$capital)^0.5 * out$L
+# cons
+(out$paths %>% filter(step == max(step)) %>% .$c_young) * out$N+
+(out$paths %>% filter(step == max(step)) %>% .$c_medium) * out$N/(1+n)+
+(out$paths %>% filter(step == max(step)) %>% .$c_old) * out$N/(1+n)^2+  
+# sav
+(out$paths %>% filter(step == max(step)) %>% .$s_young) * out$N+
+  (out$paths %>% filter(step == max(step)) %>% .$s_medium) * out$N/(1+n)
+
+(out$paths %>% filter(step == max(step)) %>% .$w) *d* out$N/(1+n)+
+  xts::lag.xts(out$paths %>% filter(step == max(step)) %>% .$s_young)*
+  (out$paths %>% filter(step == max(step)) %>% .$R)* out$N/(1+n)
+  
+
+(out$paths %>% filter(step == max(step)) %>% .$c_medium+
+    out$paths %>% filter(step == max(step)) %>% .$s_medium) * out$N/(1+n)
+
+(out$paths %>% filter(step == max(step)) %>% .$c_old) * out$N/(1+n)^2
+xts::lag.xts(out$paths %>% filter(step == max(step)) %>% .$s_medium)*
+  (out$paths %>% filter(step == max(step)) %>% .$R)* out$N/(1+n)^2
+
+(out$paths %>% filter(step == max(step)) %>% .$w)+
+  (out$paths %>% filter(step == max(step)) %>% .$R)*
+  (out$paths %>% filter(step == max(step)) %>% .$capital)
+
+(out$paths %>% filter(step == max(step)) %>% .$capital)^0.5
+
+
+
 ggplot(out)+
   geom_line(aes(x=t, y = capital, alpha = factor(step),
                 color = factor(capital0)), show.legend = FALSE)
@@ -381,13 +410,16 @@ ggplot(na.omit(out$paths))+
   geom_line(aes(x=t, y = c_young, alpha = factor(step)), show.legend = FALSE)
 
 
-out <- expand.grid(alpha = c(0.4, 0.5, 0.6),
-                   beta = c(0.9, 0.5, 0.1),
-                   d = c(0.5, 1, 10),
-                   n = c(0, 0.01),
-                   delta = c(0.5, 1),
+out <- expand.grid(alpha = c(0.5),
+                   beta = c(0.5, 0.3),
+                   d = c(0.2,1, 10),
+                   n = c(0.01),
+                   delta = c(1),
                    capital0 = 0.001) %>%
-  map_dfr(function(capital0){get.path(tol = 0.00001,
+  split(1:nrow(.)) %>%
+  map_dfr(function(x){
+    print(x)
+    get.path(tol = 0.0001,
                                       eta = 0.8,
                                       alpha = x$alpha,
                                       beta = x$beta,
@@ -396,5 +428,36 @@ out <- expand.grid(alpha = c(0.4, 0.5, 0.6),
                                       delta = x$delta,
                                       capital0 = x$capital0,
                                       Time =30)}$paths)
-#rm(list=ls())
+out %>%
+  group_by(alpha,beta,d,n,delta) %>%
+  filter(step == max(step)) %>%
+  ungroup %>%
+  ggplot()+
+  geom_line(aes(x=t, y = c_young,color='c_young'), size = 0.9)+
+  geom_line(aes(x=t, y = c_medium, color='c_medium'), size = 0.9)+
+  geom_line(aes(x=t, y = c_old,color='c_old'), size =0.9)+
+  #geom_line(aes(x=t, y = s_young, show.legend = FALSE))+
+  #geom_line(aes(x=t, y = s_medium, show.legend = FALSE))+
+  scale_y_log10()+
+  ylab('ln(consumption)')+
+  facet_grid(beta~d,
+             labeller = labeller(.rows = label_both, .cols = label_both), scales = 'free_x')
+
+library(scales)
+asinh_trans <- function(){
+  trans_new(name = 'asinh', transform = function(x) asinh(x), 
+            inverse = function(x) sinh(x))
+}
+out %>%
+  group_by(alpha,beta,d,n,delta) %>%
+  filter(step == max(step)) %>%
+  ungroup %>%
+  ggplot()+
+  geom_line(aes(x=t, y = s_young,color='c_young'), size = 0.9)+
+  geom_line(aes(x=t, y = s_medium, color='c_medium'), size = 0.9)+
+  scale_y_continuous(trans= 'asinh')+
+  #scale_y_log10()+
+  ylab('savings')+
+  facet_grid(beta~d,
+             labeller = labeller(.rows = label_both, .cols = label_both), scales = 'free_x')
 
