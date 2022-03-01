@@ -1,5 +1,3 @@
-Russia,Death rates (period 1x1),	Last modified: 26 Sep 2017;Methods Protocol: v6 (2017)
-
 Year,Age,Female,Male,Total
 1959,0,0.037393,0.046387,0.041986
 1959,1,0.006388,0.006817,0.006607

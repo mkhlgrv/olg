@@ -390,82 +390,137 @@ get.path.to.ss <- function(ss,k_1, simul_time,
 }
 
 
-get.demographics <- function(G, simul_time, eps, update= FALSE){
-  if(update){
-    G_with_children <- G+15
-    birth_rate <- read.csv('birth_rate.txt', skip = 2) %>% 
-      mutate(Age = as.character(Age),
-             Age = ifelse(Age == '55+', '55', Age),
-             Age = ifelse(Age == '12-', '12', Age),
-             Age= as.integer(Age)) %>%
-      filter(Year==2014) %>%
-      group_by(Age) %>%
-      summarise(ASFR = mean(ASFR)) %>%
-      pull(ASFR)
+get.demography.rates <- function(G_with_children,simul_time, use_migration){
+  female_to_male_ratio <- 0.9489044
+  female_ratio <- female_to_male_ratio/(1+female_to_male_ratio)
+    pop_size_female <- read.csv('pop_size_corrected.txt')  %>%
+      filter(Year==max(Year)) %>% .[,"Female"] %>%
+      .[1:G_with_children]
+    pop_size_male <- read.csv('pop_size_corrected.txt')  %>%
+      filter(Year==max(Year)) %>% .[,"Male"] %>%
+      .[1:G_with_children]
     
     
-    death_rate <- read.csv('death_rate.txt', skip = 2) %>% 
-      mutate(Age = as.character(Age),
-             Age = ifelse(Age == '110+', '110', Age),
-             Age= as.integer(Age)) %>%
-      filter(Year==2014) %>%
-      group_by(Age) %>%
-      summarise(Total = mean(Total)) %>%
-      pull(Total)
-    
-    
-    pop_size <- read.csv('pop_size.txt', skip = 2) %>% 
-      mutate(Age = as.character(Age),
-             Age = ifelse(Age == '110+', '110', Age),
-             Age= as.integer(Age)) %>%
-      filter(Year==2015) %>%
-      group_by(Age) %>% 
-      summarise(Total = mean(Total)) %>%
-      pull(Total) %>% .[1:G_with_children]
-    
-    
-    ####### потом заменить на прогноз
-    
-    mortal_rate <- rep(0,G_with_children)
-    mortal_rate[1:(G_with_children-1)] <- death_rate[1:(G_with_children-1)]
-    mortal_rate[G_with_children] <- 1
 
-    # parent age-specific births per 1 human
-    fertility_rate <- rep(0, G_with_children)
-    # надо сделать для женщин
-    fertility_rate[12:55] <- birth_rate/2
+    mortality_rate_female <- simulate_demography("death","Female", simul_time+G_with_children-1)$rate
+    mortality_rate_male <- simulate_demography("death","Male", simul_time+G_with_children-1)$rate
+    
+    if(use_migration){
+      migration_rate_female <- simulate_demography("migration", "Female",simul_time+G_with_children-1)$rate
+      migration_rate_male <- simulate_demography("migration", "Male",simul_time+G_with_children-1)$rate
+    } else{
+      migration_rate_male <- migration_rate_female <-
+        matrix(0,nrow(mortality_rate_female), ncol(mortality_rate_female))
+      
+    }
+    
+    mortality_rate_female[,G_with_children] <- 1
+    mortality_rate_male[,G_with_children] <- 1
+    
+    fertility_rate_birth_age <- simulate_demography("birth", simul_time=simul_time+G_with_children-1)$rate
+    fertility_rate <- matrix(0, nrow(mortality_rate_female), ncol(mortality_rate_female))
+    
+    fertility_rate[,12:55] <- fertility_rate_birth_age
     
     # +G_with_children-1 потому что нужно для расчета survival probability
-    Mortality <- Fertility <- N <- matrix(0, nrow=simul_time+G_with_children-1,
-                ncol = simul_time+G_with_children-1+G_with_children-1)
+    Migration_female <- Migration_male <- Mortality_female <- Mortality_male <-  Fertility <- N_female <- N_male <- N <- matrix(0, nrow=simul_time+G_with_children-1,
+                                                                                           ncol = simul_time+G_with_children-1+G_with_children-1)
     
-    for(i in 1:(simul_time+G_with_children-1)){
-      Mortality[i, i:(i+G_with_children-1)] <- rev(mortal_rate)
-      Fertility[i, i:(i+G_with_children-1)] <- rev(fertility_rate)
+    for(i in 1:simul_time){
+      Mortality_female[i, i:(i+G_with_children-1)] <- rev(mortality_rate_female[i,])
+      Mortality_male[i, i:(i+G_with_children-1)] <- rev(mortality_rate_male[i,])
+      
+      Migration_female[i, i:(i+G_with_children-1)] <- rev(migration_rate_female[i,])
+      Migration_male[i, i:(i+G_with_children-1)] <- rev(migration_rate_male[i,])
+      
+      Fertility[i, i:(i+G_with_children-1)] <- rev(fertility_rate[i,])
+    }
+    for(i in (simul_time+1):(simul_time+G_with_children-1)){
+      Mortality_female[i, i:(i+G_with_children-1)] <- rev(mortality_rate_female[simul_time,])
+      Mortality_male[i, i:(i+G_with_children-1)] <- rev(mortality_rate_male[simul_time,])
+      
+      Migration_female[i, i:(i+G_with_children-1)] <- rev(migration_rate_female[simul_time,])
+      Migration_male[i, i:(i+G_with_children-1)] <- rev(migration_rate_male[simul_time,])
+      
+      Fertility[i, i:(i+G_with_children-1)] <- rev(fertility_rate[simul_time,])
     }
     
-    N[1, 1:G_with_children] <- rev(pop_size/1000)
+    N_female[1, 1:G_with_children] <- rev(pop_size_female/1000)
+    N_male[1, 1:G_with_children] <- rev(pop_size_male/1000)
+    N[1, 1:G_with_children] <- N_female[1, 1:G_with_children]+N_male[1, 1:G_with_children]
     
-    
-    fertility_rate_total <- mortal_rate_total <- rep(NA, simul_time)
+    fertility_rate_total <- mortality_rate_total_female<-mortality_rate_total_male <-
+      mortality_rate_total <- migration_rate_total_female <- migration_rate_total_male<- 
+      migration_rate_total <- birth_rate_total <-  rep(NA, simul_time)
     
     for(t in 2:nrow(N)){
-      # deaths
-      N[t,(t-1):(G_with_children+t-2)] <- N[t-1,(t-1):(G_with_children+t-2)]*
-        (1- Mortality[t-1,(t-1):(G_with_children+t-2)])
-      mortal_rate_total[t-1] <-
-        sum(N[t-1,(t-1):(G_with_children+t-2)]*
-              Mortality[t-1,(t-1):(G_with_children+t-2)])/sum(N[t-1,(t-1):(G_with_children+t-2)])
+      # deaths and migration
+      N_female[t,(t-1):(G_with_children+t-2)] <- N_female[t-1,(t-1):(G_with_children+t-2)]*
+        (1- Mortality_female[t-1,(t-1):(G_with_children+t-2)])*(1+ Migration_female[t-1,(t-1):(G_with_children+t-2)])
+      mortality_rate_total_female[t-1] <-
+        sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+              Mortality_female[t-1,(t-1):(G_with_children+t-2)])/sum(N_female[t-1,(t-1):(G_with_children+t-2)])
+      migration_rate_total_female[t-1] <-
+        sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+              Migration_female[t-1,(t-1):(G_with_children+t-2)])/sum(N_female[t-1,(t-1):(G_with_children+t-2)])
+      
+      N_male[t,(t-1):(G_with_children+t-2)] <- N_male[t-1,(t-1):(G_with_children+t-2)]*
+        (1- Mortality_male[t-1,(t-1):(G_with_children+t-2)])*(1+ Migration_male[t-1,(t-1):(G_with_children+t-2)])
+      mortality_rate_total_male[t-1] <-
+        sum(N_male[t-1,(t-1):(G_with_children+t-2)]*
+              Mortality_male[t-1,(t-1):(G_with_children+t-2)])/sum(N_male[t-1,(t-1):(G_with_children+t-2)])
+      migration_rate_total_male[t-1] <-
+        sum(N_male[t-1,(t-1):(G_with_children+t-2)]*
+              Migration_male[t-1,(t-1):(G_with_children+t-2)])/sum(N_male[t-1,(t-1):(G_with_children+t-2)])
+      
+      N[t,(t-1):(G_with_children+t-2)] <- N_female[t,(t-1):(G_with_children+t-2)]+N_male[t,(t-1):(G_with_children+t-2)]
+      
+      mortality_rate_total[t-1] <- (sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+                                     Mortality_female[t-1,(t-1):(G_with_children+t-2)])+
+                                 sum(N_male[t-1,(t-1):(G_with_children+t-2)]*
+                                       Mortality_male[t-1,(t-1):(G_with_children+t-2)]))/sum(N[(t-1),(t-1):(G_with_children+t-2)])
+      
+      migration_rate_total[t-1] <- (sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+                                          Migration_female[t-1,(t-1):(G_with_children+t-2)])+
+                                 sum(N_male[t-1,(t-1):(G_with_children+t-2)]*
+                                       Migration_male[t-1,(t-1):(G_with_children+t-2)]))/sum(N[(t-1),(t-1):(G_with_children+t-2)])
       # births
-      N[t, G_with_children+t-1] <- sum(N[t-1,(t-1):(G_with_children+t-2)]*
-                                         Fertility[t-1,(t-1):(G_with_children+t-2)])
-      fertility_rate_total[t-1] <- sum(N[t-1,(t-1):(G_with_children+t-2)]*
+
+      N_female[t, G_with_children+t-1] <- female_ratio*sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+                                                             Fertility[t-1,(t-1):(G_with_children+t-2)])
+      N_male[t, G_with_children+t-1] <- (1-female_ratio)*sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+                                                               Fertility[t-1,(t-1):(G_with_children+t-2)])
+      N[t, G_with_children+t-1] <- N_female[t, G_with_children+t-1]+N_male[t, G_with_children+t-1]
+      fertility_rate_total[t-1] <- sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
                                          Fertility[t-1,(t-1):(G_with_children+t-2)])/
-        sum(N[t-1,(t-1):(G_with_children+t-2)])
+        sum(N_female[t-1,(t-1):(G_with_children+t-2)])
+      birth_rate_total[t-1] <- sum(N_female[t-1,(t-1):(G_with_children+t-2)]*
+                                     Fertility[t-1,(t-1):(G_with_children+t-2)])/
+        (sum(N[(t-1),(t-1):(G_with_children+t-2)]))
     }
+    list(Mortality_female=Mortality_female,
+         Mortality_male=Mortality_male,
+         Fertility=Fertility,
+         N_female=N_female,
+         N_male=N_male,
+         N=N,
+         fertility_rate_total=fertility_rate_total, 
+         mortality_rate_total_female=mortality_rate_total_female, 
+         mortality_rate_total_male=mortality_rate_total_male,
+         mortality_rate_total=mortality_rate_total, 
+         birth_rate_total=birth_rate_total,
+         migration_rate_total_female=migration_rate_total_female,
+         migration_rate_total_male=migration_rate_total_male,
+         migration_rate_total=migration_rate_total_male)
+         
+}
+
+get.demographics <- function(G, simul_time, eps,use_migration){
+
     
-    
-    
+  G_with_children <- G+15
+  demography_rates <- get.demography.rates(G_with_children,simul_time,use_migration)
+  N <- demography_rates$N
     for(i in 1:nrow(N)){
       for(j in 1:ncol(N)){
 
@@ -483,23 +538,13 @@ get.demographics <- function(G, simul_time, eps, update= FALSE){
     N_steady <- N[(simul_time-1),(simul_time-1):(simul_time-1+G-1)]
     L_steady <- L[simul_time]
     
-    Pi <- get.survival.probability(G = G, simul_time = simul_time, N = N)
+    Pi <- get.survival.probability(G = G, simul_time = simul_time, 
+                                   N = get.demography.rates(G_with_children,simul_time,FALSE)$N)
     
     Pi_steady <- Pi[((simul_time-1)*(G-1)+1):((simul_time)*(G-1)),]
-    list(N=N, N_steady=N_steady,
-         L=L, L_steady=L_steady,
-         Pi = Pi, Pi_steady=Pi_steady,
-         Fertility = Fertility,
-         Mortality=Mortality)
-  } else{
-    load.Rdata(file = 'demographics.RData',objname = 'demographics_data')
-    
-    demographics_data
-  }
-  
+    list(demography_rates=demography_rates,
+         Pi = Pi, Pi_steady=Pi_steady,L=L, L_steady=L_steady, N_steady=N_steady)
 
-  
-  
   
 }
 
