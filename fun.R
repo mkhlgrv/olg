@@ -1,5 +1,5 @@
 get.steady.state <- function(K_steady_0 = 20000, niter = 100, eta = 0.8, tol = 1/10^4, save_path=FALSE,
-                             L_steady,
+                             L_steady_0,
                              N_steady,
                              N,
                              simul_time,
@@ -31,8 +31,10 @@ get.steady.state <- function(K_steady_0 = 20000, niter = 100, eta = 0.8, tol = 1
 
 
     
+    # r_steady <- rent.rate(k_steady, alpha, delta, tau_pi)
+    r_steady <- 0.01
+    price_n 
     
-    r_steady <- rent.rate(k_steady, alpha, delta, tau_pi)
     r_steady_tax_adjusted <- rent.rate.tax.adjusted(r_steady, tau_i)
     w_steady <- wage.rate(k_steady, alpha)
     
@@ -44,13 +46,16 @@ get.steady.state <- function(K_steady_0 = 20000, niter = 100, eta = 0.8, tol = 1
                                   tau_retirement=tau_retirement,
                                   tau_insurance=tau_insurance)
     
-
+    get.bequest(t=simul_time,g = G,G=G,N =N,Mortality = )
     
+  
     
-    
-    
-    
-    cons_init <- cons.initial(g = G, t =1,Pi=Pi, r_tax_adjusted = r_steady_tax_adjusted, w = w_steady, ret = ret_steady, a_init = 0,G=G,
+    cons_init <- cons.initial(g = G, t =1,Pi=Pi,
+                              r_tax_adjusted = r_steady_tax_adjusted,
+                              w = w_steady,
+                              ret = ret_steady,
+                              a_init = 0,
+                              G=G,
                               eps=eps, eps_ret=eps_ret,
                               tau_i=tau_i,
                               tau_insurance=tau_insurance,
@@ -402,12 +407,25 @@ get.demography.rates <- function(G_with_children,simul_time, use_migration){
     
     
 
-    mortality_rate_female <- simulate_demography("death","Female", simul_time+G_with_children-1)$rate
-    mortality_rate_male <- simulate_demography("death","Male", simul_time+G_with_children-1)$rate
+    mortality_rate_female <- simulate_demography("death","Female",simul_time=simul_time+G_with_children-1,
+                                                 n_components = 5,
+                                                 lambda = 5, "mean",
+                                                 start_year = 1960, end_year = 2014
+                                                 )$rate
+    mortality_rate_male <- simulate_demography("death","Male",simul_time=simul_time+G_with_children-1,
+                                               n_components = 5,
+                                               lambda = 5, "mean",
+                                               start_year = 1960, end_year = 2014)$rate
     
     if(use_migration){
-      migration_rate_female <- simulate_demography("migration", "Female",simul_time+G_with_children-1)$rate
-      migration_rate_male <- simulate_demography("migration", "Male",simul_time+G_with_children-1)$rate
+      migration_rate_female <- simulate_demography("migration", "Female",simul_time=simul_time+G_with_children-1,
+                                                   n_components = 5,
+                                                   lambda = 0, "mean",
+                                                   start_year = 1960, end_year = 2014)$rate
+      migration_rate_male <- simulate_demography("migration", "Male",simul_time=simul_time+G_with_children-1,
+                                                 n_components = 5,
+                                                 lambda = 0, "mean",
+                                                 start_year = 1960, end_year = 2014)$rate
     } else{
       migration_rate_male <- migration_rate_female <-
         matrix(0,nrow(mortality_rate_female), ncol(mortality_rate_female))
@@ -417,7 +435,11 @@ get.demography.rates <- function(G_with_children,simul_time, use_migration){
     mortality_rate_female[,G_with_children] <- 1
     mortality_rate_male[,G_with_children] <- 1
     
-    fertility_rate_birth_age <- simulate_demography("birth", simul_time=simul_time+G_with_children-1)$rate
+    fertility_rate_birth_age <- simulate_demography("birth",simul_time=simul_time+G_with_children-1,
+                                                    n_components = 5,
+                                                    lambda = 5, "mean",
+                                                    start_year = 1960, end_year = 2014
+    )$rate
     fertility_rate <- matrix(0, nrow(mortality_rate_female), ncol(mortality_rate_female))
     
     fertility_rate[,12:55] <- fertility_rate_birth_age
@@ -445,8 +467,8 @@ get.demography.rates <- function(G_with_children,simul_time, use_migration){
       Fertility[i, i:(i+G_with_children-1)] <- rev(fertility_rate[simul_time,])
     }
     
-    N_female[1, 1:G_with_children] <- rev(pop_size_female/1000)
-    N_male[1, 1:G_with_children] <- rev(pop_size_male/1000)
+    N_female[1, 1:G_with_children] <- rev(pop_size_female/1000000)
+    N_male[1, 1:G_with_children] <- rev(pop_size_male/1000000)
     N[1, 1:G_with_children] <- N_female[1, 1:G_with_children]+N_male[1, 1:G_with_children]
     
     fertility_rate_total <- mortality_rate_total_female<-mortality_rate_total_male <-
@@ -520,30 +542,44 @@ get.demographics <- function(G, simul_time, eps,use_migration){
     
   G_with_children <- G+15
   demography_rates <- get.demography.rates(G_with_children,simul_time,use_migration)
-  N <- demography_rates$N
-    for(i in 1:nrow(N)){
-      for(j in 1:ncol(N)){
+  N_female <- demography_rates$N_female
+  N_male <- demography_rates$N_male
+    for(i in 1:nrow(N_male)){
+      for(j in 1:ncol(N_male)){
 
 
         age <- G_with_children-j+i
         if(age<16){
-          N[i,j] <- 0
+          # N_female[i,j] <- 0
 
         }
       }
     }
-    L <- get.labour.force(N,
-                          eps = eps,
-                          simul_time = simul_time, G = G)
-    N_steady <- N[(simul_time-1),(simul_time-1):(simul_time-1+G-1)]
-    L_steady <- L[simul_time]
+    crimea_coef <- 146.267288/rowSums(N_female[1:2,]+N_male[1:2,])[2]
     
-    Pi <- get.survival.probability(G = G, simul_time = simul_time, 
-                                   N = get.demography.rates(G_with_children,simul_time,FALSE)$N)
+    N_female <- crimea_coef*N_female
+    N_male <- crimea_coef*N_male
     
-    Pi_steady <- Pi[((simul_time-1)*(G-1)+1):((simul_time)*(G-1)),]
+    N_female_steady <- N_female[(simul_time-1),(simul_time-1):(simul_time-1+G-1)]
+    N_male_steady <- N_male[(simul_time-1),(simul_time-1):(simul_time-1+G-1)]
+    
+    Pi_female <- get.survival.probability(G = G, simul_time = simul_time, 
+                                   N = get.demography.rates(G_with_children,simul_time,FALSE)$N_female)
+    Pi_male <- get.survival.probability(G = G, simul_time = simul_time, 
+                                  N = get.demography.rates(G_with_children,simul_time,FALSE)$N_male)
+    
+    
+    Pi_female_steady <- Pi_female[((simul_time-1)*(G-1)+1):((simul_time)*(G-1)),]
+    Pi_male_steady <- Pi_male[((simul_time-1)*(G-1)+1):((simul_time)*(G-1)),]
     list(demography_rates=demography_rates,
-         Pi = Pi, Pi_steady=Pi_steady,L=L, L_steady=L_steady, N_steady=N_steady)
+         N_female=N_female,
+         N_male=N_male,
+         N_female_steady=N_female_steady,
+         N_male_steady=N_male_steady,
+         Pi_female = Pi_female,
+         Pi_male=Pi_male,
+         Pi_female_steady=Pi_female_steady,
+         Pi_male_steady=Pi_male_steady)
 
   
 }
@@ -604,8 +640,8 @@ get.bequest <- function(t,
   #                                  N[(j-G_with_children+1):(t-1),j])
   # }
 
-   print(Mortality[t-1,
-                   (t-1):(g-1)])
+   # print(Mortality[t-1,
+   #                 (t-1):(g-1)])
   sum(N[t-1,
         (t-1):(g-1)]*
         Mortality[t-1,

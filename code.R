@@ -1,5 +1,3 @@
-
-
 out1 <- master.function(simul_time = 500,
                         k_initial = 8,
                         K_steady_0 = 20000,
