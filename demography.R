@@ -159,7 +159,7 @@ simulate_demography <- function(type=c("death", "birth", "migration"),
 
   }
   projection <- matrix(0, simul_time, n_G)
-  for(i in 1:simul_time){
+  for(i in 1:100){
 
     projection[i,] <- mu_S+Phi[1,]+colSums(Phi[-1,]*beta[i,])
     
@@ -167,6 +167,10 @@ simulate_demography <- function(type=c("death", "birth", "migration"),
       projection[i,] <- smooth.spline(projection[i,], df = 30)$y
     }
   }
+  for (i in 101:simul_time){
+    projection[i,] <- projection[100,]
+  }
+  
   
  
   
@@ -198,10 +202,10 @@ simulate_demography <- function(type=c("death", "birth", "migration"),
 
 result_rate <- simulate_demography("birth",simul_time=600,n_components = 5,lambda = 5, "mean", start_year = 1960, end_year = 2014)
 ggplot()+
-  geom_line(data = melt(result_rate$rate[c(1,2,3,5,10,100),1:40]),aes(x=Var2, y = value, group=Var1), alpha=0.2)+
+  geom_line(data = melt(result_rate$rate[c(100,100),1:40]),aes(x=Var2, y = value, group=Var1), alpha=0.2)+
   geom_line(aes(1:40,result_rate$input[1:40,ncol(result_rate$input)]), color ="red")
 
-result_rate <- simulate_demography("death","Male",simul_time=600,n_components = 5,lambda = 5, "mean", start_year = 1960, end_year = 2014)
+result_rate <- simulate_demography("death","Male",simul_time=600,n_components = 5,lambda = 1, "mean", start_year = 1960, end_year = 2014)
 ggplot()+
   geom_line(data = melt(result_rate$rate[c(100,100),1:90]),aes(x=Var2, y = value, group=Var1), alpha=0.2)+
   geom_line(aes(1:90,result_rate$input[1:90,ncol(result_rate$input)]), color ="red")
@@ -218,7 +222,7 @@ ggplot()+
 
 result_rate <- simulate_demography("migration","Male",simul_time=600,n_components = 5,lambda = 0, "mean", start_year = 1960, end_year = 2014)
 ggplot()+
-  geom_line(data = melt(result_rate$rate[c(50,100),1:60]),aes(x=Var2, y = value, group=Var1), alpha=0.2)#+
+  geom_line(data = melt(result_rate$rate[c(100,100),1:60]),aes(x=Var2, y = value, group=Var1), alpha=0.2)#+
   # geom_line(aes(1:60,result_rate$input[1:60,ncol(result_rate$input)]), color ="red")
 
 
@@ -263,4 +267,4 @@ max_t <- 35
 ggplot(data=NULL,aes(x=2:max_t))+
   geom_line(aes(y=rowSums(N_female[2:max_t,]+N_male[2:max_t,]), color="projection"))+
   geom_line(data=real_population,aes(x = x, y =size, color="real"))
-rowSums(N_female_nm[1:100,]+N_male_nm[1:100,])
+plot(rowSums(N_female[2:501,]+N_male[2:501,])/rowSums(N_female[1:500,]+N_male[1:500,]))
