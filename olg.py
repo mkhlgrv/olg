@@ -462,7 +462,7 @@ class OLG_model:
             self.i[0,t_0:steady_start] = np.linspace(self.i[0,t_0], self.i[0,steady_start],\
                                                       steady_start-t_0,endpoint=False)
             self.i[1,t_0:steady_start] = np.linspace(self.i[1,t_0], self.i[1,steady_start],\
-                                                      steady_start-0,endpoint=False)
+                                                      steady_start-t_0,endpoint=False)
 
             self.L_share[0,t_0:steady_start] = np.linspace(self.L_share[0,t_0], self.L_share[0,steady_start],\
                                                       steady_start-t_0,endpoint=False)
@@ -471,7 +471,7 @@ class OLG_model:
             
             self.w[t_0:steady_start] = np.linspace(self.w[t_0], self.w[steady_start], steady_start-t_0,endpoint=False)
             self.price_N[t_0:steady_start] = np.linspace(self.price_N[t_0], self.price_N[steady_start], steady_start-t_0,endpoint=False)
-            self.price[t_0:steady_start] = np.linspace(self.price[t_0], self.price_N[steady_start], steady_start,endpoint=False)
+            self.price[t_0:steady_start] = np.linspace(self.price[t_0], self.price[steady_start], steady_start-t_0,endpoint=False)
      
     
     
