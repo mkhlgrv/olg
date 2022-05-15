@@ -7,6 +7,8 @@ from cyipopt import minimize_ipopt
 import warnings
 import matplotlib.pyplot as plt
 from jax.config import config
+import sys
+import pickle
 # Enable 64 bit floating point precision
 config.update("jax_enable_x64", True)
 
@@ -32,11 +34,107 @@ def counted(f):
 def labor_income_vector(self, s, g, start, end):
     return (1-self.tau_I[start:end]) * (1-(self.tau_rho[start:end] + self.tau_Ins[start:end])/(1+self.tau_rho[start:end] + self.tau_Ins[start:end])) * self.epsilon[s,g,start:end] * self.w[start:end]
 
+class Guess_plot:
+    def __init__(self,olg, t_0, t_1):
+        self.olg=olg
+        self.time = range(t_0,t_1)
+    def plot(self):
+        self.ax.plot()
+        
+class Aggregate_plot(Guess_plot):
+    def __init__(self,olg,t_0=2, t_1=100):
+        super(Aggregate_plot, self).__init__(olg, t_0, t_1)
+        self.fig, self.ax = plt.subplots(3,3, figsize = (15,10))
+    def create(self,alpha=1, linestyle='solid', color="black"):
+        plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
+        c = self.olg.Consumption[self.time]/(self.olg.N[:,:,self.time].sum(axis=(0,1))*self.olg.A[0,self.time])
+        l = self.olg.Labor[self.time]/self.olg.N[:,:,self.time].sum()
+        
+        self.ax[0,0].plot(self.olg.k[0,self.time], **plt_kwargs, label = r"$k_N$")
+        self.ax[1,0].plot(self.olg.k[1,self.time], **plt_kwargs, label = r"$k_E$")
+        self.ax[0,1].plot(self.olg.i[0,self.time], **plt_kwargs, label = r"$i_N$")
+        self.ax[1,1].plot(self.olg.i[1,self.time], **plt_kwargs, label = r"$i_E$")
+        self.ax[0,2].plot(l, **plt_kwargs, label = r"$c$")
+        self.ax[1,2].plot(c, **plt_kwargs, label = r"$l$")
+        self.ax[2,0].plot(self.olg.w[self.time], **plt_kwargs, label = r"$w$")
+        self.ax[2,1].plot(self.olg.price[self.time],**plt_kwargs, label = r"$p$")
+        self.ax[2,2].plot(self.olg.price[self.time],**plt_kwargs, label = r"$p_N$")
+        for row in self.ax:
+            for col in row:
+                col.legend()
+                
+                
+    def update(self,alpha=1, linestyle='solid', color="black"):
+        plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
+        c = self.olg.Consumption[self.time]/(self.olg.N[:,:,self.time].sum(axis=(0,1))*self.olg.A[0,self.time])
+        l = self.olg.Labor[self.time]/self.olg.N[:,:,self.time].sum()
+        
+        self.ax[0,0].plot(self.olg.k[0,self.time], **plt_kwargs)
+        self.ax[1,0].plot(self.olg.k[1,self.time], **plt_kwargs)
+        self.ax[0,1].plot(self.olg.i[0,self.time], **plt_kwargs)
+        self.ax[1,1].plot(self.olg.i[1,self.time], **plt_kwargs)
+        self.ax[0,2].plot(l, **plt_kwargs, label = r"$c$")
+        self.ax[1,2].plot(c, **plt_kwargs, label = r"$l$")
+        self.ax[2,0].plot(self.olg.w[self.time], **plt_kwargs)
+        self.ax[2,1].plot(self.olg.price[self.time],**plt_kwargs)
+        self.ax[2,2].plot(self.olg.price[self.time],**plt_kwargs)
+        for row in self.ax:
+            for col in row:
+                col.legend()
 
+class Household_plot(Guess_plot):
+    def __init__(self,olg,g_0=30, g_1=60):
+        super(Household_plot, self).__init__(olg, 0, 0)
+        self.fig, self.ax = plt.subplots(2,3, figsize = (15,10))
+        self.g_0 = g_0
+        self.g_1 = g_1
+    def create(self,alpha=1, linestyle='solid', color="black"):
+        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
+        
+        time_0 = range(max(1, self.g_0-self.olg.G+1), self.g_0)
+        time_1 = range(max(1, self.g_1-self.olg.G+1), self.g_1)
+        self.ax[0,0].plot(self.olg.c[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$c_{f,0}$")
+        self.ax[0,1].plot(self.olg.l[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$l_{f,0}$")
+        self.ax[0,2].plot(self.olg.a[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$a_{f,0}$")
+        self.ax[0,0].plot(self.olg.c[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$c_{m,0}$")
+        self.ax[0,1].plot(self.olg.l[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$l_{m,0}$")
+        self.ax[0,2].plot(self.olg.a[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$a_{m,0}$")
+        
+        self.ax[1,0].plot(self.olg.c[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$c_{f,1}$")
+        self.ax[1,1].plot(self.olg.l[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$l_{f,1}$")
+        self.ax[1,2].plot(self.olg.a[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$a_{f,1}$")
+        self.ax[1,0].plot(self.olg.c[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$c_{m,1}$")
+        self.ax[1,1].plot(self.olg.l[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$l_{m,1}$")
+        self.ax[1,2].plot(self.olg.a[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$a_{m,1}$")
+            
+        for row in self.ax:
+            for col in row:
+                col.legend()
+
+    def update(self,alpha=1, linestyle='solid', color="black"):
+        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
+        
+        time_0 = range(max(1, self.g_0-self.olg.G+1), self.g_0)
+        time_1 = range(max(1, self.g_1-self.olg.G+1), self.g_1)
+        self.ax[0,0].plot(self.olg.c[0,self.g_0,time_0], **plt_kwargs,color="red")
+        self.ax[0,1].plot(self.olg.l[0,self.g_0,time_0], **plt_kwargs,color="red")
+        self.ax[0,2].plot(self.olg.a[0,self.g_0,time_0], **plt_kwargs,color="red")
+        self.ax[0,0].plot(self.olg.c[1,self.g_0,time_0], **plt_kwargs,color="black")
+        self.ax[0,1].plot(self.olg.l[1,self.g_0,time_0], **plt_kwargs,color="black")
+        self.ax[0,2].plot(self.olg.a[1,self.g_0,time_0], **plt_kwargs,color="black")
+        
+        self.ax[1,0].plot(self.olg.c[0,self.g_1,time_1], **plt_kwargs,color="red")
+        self.ax[1,1].plot(self.olg.l[0,self.g_1,time_1], **plt_kwargs,color="red")
+        self.ax[1,2].plot(self.olg.a[0,self.g_1,time_1], **plt_kwargs,color="red")
+        self.ax[1,0].plot(self.olg.c[1,self.g_1,time_1], **plt_kwargs,color="black")
+        self.ax[1,1].plot(self.olg.l[1,self.g_1,time_1], **plt_kwargs,color="black")
+        self.ax[1,2].plot(self.olg.a[1,self.g_1,time_1], **plt_kwargs,color="black")
+
+plt.rc('legend', fontsize=12) 
 class OLG_model:
     def __init__(self, G,T,N,epsilon, rho, sigma,Pi,r,price_M, price_E, tau_I,tau_II,tau_Ins,
                  tau_pi, tau_VA, tau_rho, beta, phi ,theta , psi, omega, alpha,gov_ratio,
-                 delta, A,initial,Oil, gov_const, eta,steady_max_iter,max_iter,steady_guess):
+                 delta, A,initial,Oil, deficit_ratio_initial,gov_const, eta,steady_max_iter,max_iter,steady_guess):
         """
         OLG model
         :param G: number of generations, default is 110
@@ -114,6 +212,7 @@ class OLG_model:
         self.Rho_sum= np.zeros_like(self.Debt)
         self.Pi_sum= np.zeros_like(self.Debt)
         self.Oil = Oil
+        self.deficit_ratio_initial = deficit_ratio_initial
             
         self.Gov_Income= np.zeros_like(self.Debt)
         self.gov_ratio = gov_ratio
@@ -195,9 +294,10 @@ class OLG_model:
         self.GDP = np.ones_like(self.Gov)
 #         self.D+ self.price_N/self.price * self.Gov+self.Oil
         
-        self.history = {t:[] for t in range(self.T)}
+        self.history = {t:[] for t in range(max_time)}
           
     def update_government(self, t):
+
         self.GDP[t] = self.Oil[t]+\
         (self.K[:,t].sum())**self.alpha*((self.A[:,t]*self.L[:,t]).sum(axis=0))**(1-self.alpha)
         
@@ -230,6 +330,9 @@ class OLG_model:
                 self.r[t]*self.Debt[t-1]
         self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
         self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
+        if t==0 and abs(self.Deficit_ratio[t]-self.deficit_ratio_initial)>0.00005:
+            self.gov_const = self.gov_const - self.GDP[t]*(self.Deficit_ratio[t]-self.deficit_ratio_initial)
+            self.update_government(0)
         if t == 0:
             self.Debt[t] = self.initial["Debt"]+self.Deficit[t]
         else:
@@ -309,11 +412,7 @@ class OLG_model:
                 * self.A_growth**(g-self.G + 1 - self.T)
                 self.l[s, g, (g-self.G + 1):(g+1)]  = self.l[s, self.G+self.T-1, (self.T):(self.G+self.T)]
                 self.a[s, g,(g-self.G + 1):(g+1)]  =self.a[s, self.G+self.T-1, (self.T):(self.G+self.T)]* self.A_growth**(g-self.G + 1 - self.T)
-#                 labor_income_vector(self, s, g,g-self.G + 1, g-self.G + 2)[0]*self.l[s, g, g-self.G + 1]+self.rho[s,g,g-self.G + 1]*self.w[g-self.G + 1]*self.sigma[g-self.G + 1] - self.c[s, g, g-self.G + 1]*(1+self.tau_VA[g-self.G + 1])*self.price[g-self.G + 1]
-#                 for t in range(g-self.G + 2, g+1):
-#                     self.c[s, g, t]
-#                     self.l[s, g, t]
-#                     self.a[s, g, t] =  self.household(s, g, t)
+                
         Consumption = np.sum([self.c[s,g,self.T]*self.N[s,g,self.T] 
                               for g in range(self.T, self.G+self.T) 
                               for s in range(2)])
@@ -675,6 +774,7 @@ n_generations = 60
 
 max_time = demography["N"][0].shape[1]
 sigma = np.array([0.356 for _ in range(max_time)])
+sigma_low = np.array([0.3 for _ in range(max_time)])
 r = np.array([0.078 for _ in range(max_time)])
 price_M = np.array([1. for _ in range(max_time)])
 price_E = np.array([1. for _ in range(max_time)])
@@ -704,6 +804,7 @@ Gov_init= 15.473015261121128
 I_init = 5.202
 Consumption_init = GDP_initial + Oil_initial - I_init - Gov_init
 gov_const = 2.8
+deficit_ratio_initial = 0.01069
 
 initial = {"a_initial_sum":500,
                 "price_N":1.,
