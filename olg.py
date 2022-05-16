@@ -7,134 +7,30 @@ from cyipopt import minimize_ipopt
 import warnings
 import matplotlib.pyplot as plt
 from jax.config import config
-import sys
 import pickle
-# Enable 64 bit floating point precision
+import sys
 config.update("jax_enable_x64", True)
-
-# We use the CPU instead of GPU und mute all warnings if no GPU/TPU is found.
 config.update('jax_platform_name', 'cpu')
 
-# import jax.numpy as np
 from jax import jit, grad, jacfwd, jacrev
-from tqdm.contrib.telegram import tqdm, trange
-from dotenv import load_dotenv
-import os
 
-from bob_telegram_tools.bot import TelegramBot
-load_dotenv()
-
-def counted(f):
-    def wrapped(*args, **kwargs):
-        wrapped.calls += 1
-        return f(*args, **kwargs)
-    wrapped.calls = 0
-    return wrapped
+from guess_plot import *
+from progress_bar import *
+from default_value import *
 
 def labor_income_vector(self, s, g, start, end):
     return (1-self.tau_I[start:end]) * (1-(self.tau_rho[start:end] + self.tau_Ins[start:end])/(1+self.tau_rho[start:end] + self.tau_Ins[start:end])) * self.epsilon[s,g,start:end] * self.w[start:end]
 
-class Guess_plot:
-    def __init__(self,olg, t_0, t_1):
-        self.olg=olg
-        self.time = range(t_0,t_1)
-    def plot(self):
-        self.ax.plot()
-        
-class Aggregate_plot(Guess_plot):
-    def __init__(self,olg,t_0=2, t_1=100):
-        super(Aggregate_plot, self).__init__(olg, t_0, t_1)
-        self.fig, self.ax = plt.subplots(3,3, figsize = (15,10))
-    def create(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
-        c = self.olg.Consumption[self.time]/(self.olg.N[:,:,self.time].sum(axis=(0,1))*self.olg.A[0,self.time])
-        l = self.olg.Labor[self.time]/self.olg.N[:,:,self.time].sum()
-        
-        self.ax[0,0].plot(self.olg.k[0,self.time], **plt_kwargs, label = r"$k_N$")
-        self.ax[1,0].plot(self.olg.k[1,self.time], **plt_kwargs, label = r"$k_E$")
-        self.ax[0,1].plot(self.olg.i[0,self.time], **plt_kwargs, label = r"$i_N$")
-        self.ax[1,1].plot(self.olg.i[1,self.time], **plt_kwargs, label = r"$i_E$")
-        self.ax[0,2].plot(l, **plt_kwargs, label = r"$c$")
-        self.ax[1,2].plot(c, **plt_kwargs, label = r"$l$")
-        self.ax[2,0].plot(self.olg.w[self.time], **plt_kwargs, label = r"$w$")
-        self.ax[2,1].plot(self.olg.price[self.time],**plt_kwargs, label = r"$p$")
-        self.ax[2,2].plot(self.olg.price[self.time],**plt_kwargs, label = r"$p_N$")
-        for row in self.ax:
-            for col in row:
-                col.legend()
-                
-                
-    def update(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
-        c = self.olg.Consumption[self.time]/(self.olg.N[:,:,self.time].sum(axis=(0,1))*self.olg.A[0,self.time])
-        l = self.olg.Labor[self.time]/self.olg.N[:,:,self.time].sum()
-        
-        self.ax[0,0].plot(self.olg.k[0,self.time], **plt_kwargs)
-        self.ax[1,0].plot(self.olg.k[1,self.time], **plt_kwargs)
-        self.ax[0,1].plot(self.olg.i[0,self.time], **plt_kwargs)
-        self.ax[1,1].plot(self.olg.i[1,self.time], **plt_kwargs)
-        self.ax[0,2].plot(l, **plt_kwargs, label = r"$c$")
-        self.ax[1,2].plot(c, **plt_kwargs, label = r"$l$")
-        self.ax[2,0].plot(self.olg.w[self.time], **plt_kwargs)
-        self.ax[2,1].plot(self.olg.price[self.time],**plt_kwargs)
-        self.ax[2,2].plot(self.olg.price[self.time],**plt_kwargs)
-        for row in self.ax:
-            for col in row:
-                col.legend()
-
-class Household_plot(Guess_plot):
-    def __init__(self,olg,g_0=30, g_1=60):
-        super(Household_plot, self).__init__(olg, 0, 0)
-        self.fig, self.ax = plt.subplots(2,3, figsize = (15,10))
-        self.g_0 = g_0
-        self.g_1 = g_1
-    def create(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
-        
-        time_0 = range(max(1, self.g_0-self.olg.G+1), self.g_0)
-        time_1 = range(max(1, self.g_1-self.olg.G+1), self.g_1)
-        self.ax[0,0].plot(self.olg.c[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$c_{f,0}$")
-        self.ax[0,1].plot(self.olg.l[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$l_{f,0}$")
-        self.ax[0,2].plot(self.olg.a[0,self.g_0,time_0], **plt_kwargs,color="red", label = r"$a_{f,0}$")
-        self.ax[0,0].plot(self.olg.c[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$c_{m,0}$")
-        self.ax[0,1].plot(self.olg.l[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$l_{m,0}$")
-        self.ax[0,2].plot(self.olg.a[1,self.g_0,time_0], **plt_kwargs,color="black", label = r"$a_{m,0}$")
-        
-        self.ax[1,0].plot(self.olg.c[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$c_{f,1}$")
-        self.ax[1,1].plot(self.olg.l[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$l_{f,1}$")
-        self.ax[1,2].plot(self.olg.a[0,self.g_1,time_1], **plt_kwargs,color="red", label = r"$a_{f,1}$")
-        self.ax[1,0].plot(self.olg.c[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$c_{m,1}$")
-        self.ax[1,1].plot(self.olg.l[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$l_{m,1}$")
-        self.ax[1,2].plot(self.olg.a[1,self.g_1,time_1], **plt_kwargs,color="black", label = r"$a_{m,1}$")
-            
-        for row in self.ax:
-            for col in row:
-                col.legend()
-
-    def update(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
-        
-        time_0 = range(max(1, self.g_0-self.olg.G+1), self.g_0)
-        time_1 = range(max(1, self.g_1-self.olg.G+1), self.g_1)
-        self.ax[0,0].plot(self.olg.c[0,self.g_0,time_0], **plt_kwargs,color="red")
-        self.ax[0,1].plot(self.olg.l[0,self.g_0,time_0], **plt_kwargs,color="red")
-        self.ax[0,2].plot(self.olg.a[0,self.g_0,time_0], **plt_kwargs,color="red")
-        self.ax[0,0].plot(self.olg.c[1,self.g_0,time_0], **plt_kwargs,color="black")
-        self.ax[0,1].plot(self.olg.l[1,self.g_0,time_0], **plt_kwargs,color="black")
-        self.ax[0,2].plot(self.olg.a[1,self.g_0,time_0], **plt_kwargs,color="black")
-        
-        self.ax[1,0].plot(self.olg.c[0,self.g_1,time_1], **plt_kwargs,color="red")
-        self.ax[1,1].plot(self.olg.l[0,self.g_1,time_1], **plt_kwargs,color="red")
-        self.ax[1,2].plot(self.olg.a[0,self.g_1,time_1], **plt_kwargs,color="red")
-        self.ax[1,0].plot(self.olg.c[1,self.g_1,time_1], **plt_kwargs,color="black")
-        self.ax[1,1].plot(self.olg.l[1,self.g_1,time_1], **plt_kwargs,color="black")
-        self.ax[1,2].plot(self.olg.a[1,self.g_1,time_1], **plt_kwargs,color="black")
 
 plt.rc('legend', fontsize=12) 
+
+
+
 class OLG_model:
-    def __init__(self, G,T,N,epsilon, rho, sigma,Pi,r,price_M, price_E, tau_I,tau_II,tau_Ins,
-                 tau_pi, tau_VA, tau_rho, beta, phi ,theta , psi, omega, alpha,gov_ratio,
-                 delta, A,initial,Oil, deficit_ratio_initial,gov_const, eta,steady_max_iter,max_iter,steady_guess):
+    def __init__(self, G=60,T=250,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,
+                 gov_strategy="unbalanced",gov_retirement_strategy="unbalanced",
+                 tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho, beta=0.93, phi=0.23 ,theta =1., psi=24., omega=0.269, alpha=0.35,gov_ratio=0.2,
+                 delta=0.0608, A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial, eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
         """
         OLG model
         :param G: number of generations, default is 110
@@ -145,6 +41,8 @@ class OLG_model:
         :param epsilon_male: male cohort- and year-specific productivity
         :param rho_female: female cohort- and year-specific retirement rate
         :param rho_male: male cohort- and year-specific retirement rate
+        :param gov_strategy: "adaptive_gov", "adaptive_sigma", "adaptive_tau_rho", "unbalanced"
+        :param gov_retirement_strategy: "unbalanced" for unbalanced retirement budget, "fixed_tau_rho" or "fixed_sigma" to zero-deficit retirement system
         :param sigma: pension rate (pension point value) as share of wage for T periods
         :param Pi_female: survival probability
         :param Pi_male: survival probability
@@ -188,6 +86,8 @@ class OLG_model:
         self.initial = initial
 
         self.last_guess = None
+        self.gov_strategy = gov_strategy
+        self.gov_retirement_strategy = gov_retirement_strategy
 
         self.eta = eta
         self.steady_max_iter = steady_max_iter
@@ -201,7 +101,6 @@ class OLG_model:
         self.I = np.array([[initial["I_N"] for _ in range(max_time)], [initial["I_E"] for _ in range(max_time)]])
         
         self.Debt = np.array([initial["Debt"] for _ in range(max_time)])
-        self.gov_const = gov_const
         
         
         self.VA_sum= np.zeros_like(self.Debt)
@@ -215,7 +114,7 @@ class OLG_model:
         self.deficit_ratio_initial = deficit_ratio_initial
             
         self.Gov_Income= np.zeros_like(self.Debt)
-        self.gov_ratio = gov_ratio
+        self.gov_ratio = np.array([gov_ratio for _ in range(max_time)])
         
         self.Gov_Outcome= np.zeros_like(self.Debt)
         self.Deficit= np.zeros_like(self.Debt)
@@ -251,6 +150,8 @@ class OLG_model:
         self.L_share = np.ones_like(self.L)
         self.L_share[0] = initial["L_N"]/(initial["L_N"] +initial["L_E"] )
         self.L_share[1] = initial["L_E"]/(initial["L_N"] +initial["L_E"] )
+        
+        self.gov_adaptation_time = None
         
 
 
@@ -299,9 +200,10 @@ class OLG_model:
     def update_government(self, t):
 
         self.GDP[t] = self.Oil[t]+\
-        (self.K[:,t].sum())**self.alpha*((self.A[:,t]*self.L[:,t]).sum(axis=0))**(1-self.alpha)
+        np.sum(np.array([self.price_N[t], self.price_E[t]])*\
+        self.K[:,t]**self.alpha * (self.A[:,t]*self.L[:,t])**(1-self.alpha)/self.price[t])
         
-        self.Gov[t] =  self.gov_ratio*self.GDP[t]+self.Oil[t]+self.gov_const
+        self.Gov[t] =  self.gov_ratio[t]*self.GDP[t]+self.Oil[t]
         self.VA_sum[t] = self.tau_VA[t]*self.price[t]*(self.Consumption[t]+self.I[0,t]+self.I[1, t])
         self.II_sum[t] = self.tau_II[t]*self.Assets[t]
         self.I_sum[t] = self.Labor[t] * self.w[t] *\
@@ -309,10 +211,22 @@ class OLG_model:
                          (1+self.tau_rho[t] + self.tau_Ins[t])) *\
                         self.tau_I[t] 
         
-
+        
         
         self.Ins_sum[t] = self.tau_Ins[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
+        
         self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
+        
+        if self.gov_retirement_strategy != "unbalanced":
+            if self.gov_retirement_strategy == "fixed_tau_rho":
+                self.sigma[t] = self.Rho_sum[t]/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
+            if self.gov_retirement_strategy == "fixed_sigma":
+                self.tau_rho[t] = self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
+                /(L[t]*w[t])* (1+self.tau_Ins[t]) /(1-self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
+                                                    /(L[t]*w[t]))
+                
+            
+        
         self.Pi_sum[t] = self.tau_pi[t] * (self.price[t] * self.K[0,t]**self.alpha *\
                                            (self.L[0,t]*self.A[0,t])**(1-self.alpha) -\
         self.w[t]*self.L[0,t] - self.delta * self.price[t]*self.K[0,t])+\
@@ -330,9 +244,24 @@ class OLG_model:
                 self.r[t]*self.Debt[t-1]
         self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
         self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
+        
+        
         if t==0 and abs(self.Deficit_ratio[t]-self.deficit_ratio_initial)>0.00005:
-            self.gov_const = self.gov_const - self.GDP[t]*(self.Deficit_ratio[t]-self.deficit_ratio_initial)
-            self.update_government(0)
+            self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]-self.deficit_ratio_initial)
+            
+        if abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio:
+            fiscal_gap = self.Deficit+0.01*self.GDP[t]
+            if (self.gov_strategy == "adaptive_sigma"):
+                self.sigma[t:max_time] = self.sigma[t:max_time]+\
+                fiscal_gap/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
+            if self.gov_strategy == "adaptive_gov":
+                self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]+0.01)
+            if self.gov_strategy == "adaptive_tau_rho":
+                self.tau_rho[t:max_time] = np.array([(fiscal_gap + self.Rho_sum[t] * (1+self.tau_Ins[t]))/(L[t] * w[t] - self.Rho_sum[t] ) for _ in range(max_time-t)])
+                
+            self.gov_adaptation_time = t
+                
+                
         if t == 0:
             self.Debt[t] = self.initial["Debt"]+self.Deficit[t]
         else:
@@ -355,17 +284,28 @@ class OLG_model:
                 a_init = self.a_initial[s,g]
             else:
                 a_init = self.a[s,g,t_0-1]
-                
-            return (1-self.phi) * (a_init * cumulative_rate_of_return(self, t_0, g+1)+
+
+            return (a_init * cumulative_rate_of_return(self, t_0, g+1)+
                                np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
-                                      (labor_income_vector(self, s, g, t_0, g+1)+self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
+                                      (labor_income_vector(self, s, g, t_0, g+1)+\
+                                       self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
                                        )))/\
-                   np.sum(
+                   (1/(1-self.phi)*np.sum(
                        np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
                        (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
                                np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
-                               self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))
-                   )
+                               self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                np.sign(self.epsilon[s,g,t_0:g+1])
+                   )+\
+        np.sum(
+                       np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                       (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
+                               np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
+                               self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                (1-np.sign(self.epsilon[s,g,t_0:g+1]))
+                   ))
+        
+        
 
         bequest = 0
         if t_0 is None:
@@ -375,12 +315,17 @@ class OLG_model:
                 consumption = get_initial_consumption(self, s, g, t)
             else:
                 t_0 = max(g-self.G+1,t_0)
+                
                 consumption = self.c[s, g, t_0]*\
                           (cumulative_rate_of_return(self, t_0+1, t+1)*
                            self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
                            self.price[t_0]/((1+self.tau_VA[t])*self.price[t])
                            )
-            labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
+            if self.epsilon[s,g,t] == 0:
+                labor = 0
+            else:
+                
+                labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
             if t == 0:
                         assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+self.a_initial[s,g]*(1+self.r[t]*(1-self.tau_II[t]))
             else:
@@ -391,7 +336,6 @@ class OLG_model:
 
 
     
-    @counted
     def steady_state(self):
 
         w_steady, price_steady, price_N_steady = self.steady[3:6]
@@ -426,8 +370,8 @@ class OLG_model:
         else:
             self.steady[-3:] = self.eta*np.array([Consumption,  Labor, Assets]) + (1-self.eta)*self.steady[-3:]
             
-        gov = self.gov_ratio*((self.steady[0]+self.steady[2])**self.alpha+\
-                              (self.Oil[self.T]+self.gov_const)/(self.A[0,self.T]*self.steady[-2]))
+        gov = self.gov_ratio[self.T]*((self.steady[0]+self.steady[2])**self.alpha+\
+                              (self.Oil[self.T])/(self.A[0,self.T]*self.steady[-2]))
 
 
         z_guess = self.steady[:6]
@@ -622,10 +566,10 @@ class OLG_model:
         self.a_initial[:,self.G-2::-1]=self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
         
 
-    def update_household(self,t):              
+    def update_household(self,t, t_0=None):              
         for s in range(2):
             for g in range(t, self.G+t):
-                self.c[s, g, t],self.l[s, g, t],self.a[s, g,t]  = self.household(s,g,t,t)
+                self.c[s, g, t],self.l[s, g, t],self.a[s, g,t]  = self.household(s,g,t,t_0)
 
         self.Consumption[t] = np.sum([self.c[s,g,t]*self.N[s,g,t] 
                                       for g in range(t, self.G+t) 
@@ -765,63 +709,3 @@ class OLG_model:
         self.Y[:,t] = self.K[:,t]**self.alpha * (self.L[:,t]*self.A[:,t])**(1-self.alpha)
         self.D[t] = self.Consumption[t]+self.I[0,t]+self.I[1,t]
         self.M[t] =  self.omega * self.D[t] * self.price[t] / self.price_M[t]
-
-        
-           
-demography = np.load('demography.npy',allow_pickle='TRUE').item()
-n_generations = 60
-
-
-max_time = demography["N"][0].shape[1]
-sigma = np.array([0.356 for _ in range(max_time)])
-sigma_low = np.array([0.3 for _ in range(max_time)])
-r = np.array([0.078 for _ in range(max_time)])
-price_M = np.array([1. for _ in range(max_time)])
-price_E = np.array([1. for _ in range(max_time)])
-tau_I = np.array([0.13 for _ in range(max_time)])
-tau_II = np.array([0. for _ in range(max_time)])
-tau_Ins = np.array([0.08 for _ in range(max_time)])
-tau_pi = np.array([0.2 for _ in range(max_time)])
-tau_VA = np.array([0.18 for _ in range(max_time)])
-tau_rho = np.array([0.22 for _ in range(max_time)])
-A_N = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(max_time-100)]))))
-A_E = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(max_time-100)]))))
-
-
-N = demography["N"]
-Pi = demography["Pi"]
-epsilon = demography["epsilon"]
-rho = demography["rho"]
-rho_reform = demography["rho_reform"]
-
-A = np.array([A_N, A_E])
-
-GDP_initial = 44.089**0.35 * 72.508**0.65
-Oil_initial = GDP_initial*0.0914 /(1-0.0914)
-Debt_initial = GDP_initial*0.10051
-Oil = np.array([Oil_initial for _ in range(max_time)])
-Gov_init= 15.473015261121128
-I_init = 5.202
-Consumption_init = GDP_initial + Oil_initial - I_init - Gov_init
-gov_const = 2.8
-deficit_ratio_initial = 0.01069
-
-initial = {"a_initial_sum":500,
-                "price_N":1.,
-                 "K_N":44.089*(1-0.198),
-                 "L_N":72.508*(1-0.198),
-                 "I_N":I_init*(1-0.198),
-                 "K_E":44.089*(0.198),
-                 "L_E":72.508*(0.198),
-                 "Gov":Gov_init, # растет с темпом A_growth * N_growth
-                 "Debt":Debt_initial,
-                 "I_E":I_init*(0.198),
-                  "C":Consumption_init}
-
-
-           
-steady_guess = np.array([ 2.46949299,  0.98187727,  0.04557998, 17.60330632,  1.        ,
-          1.        ])
-# 1.64621862e+00, 5.51431604e-01, 1.33702093e+00, 1.86847877e+01,
-#        1.00000001e+00, 1.00000002e+00, 7.16603182e+02, 4.09318015e+01,
-#        4.12347576e+03       
