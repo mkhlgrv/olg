@@ -23,7 +23,6 @@ with warnings.catch_warnings():
 
         olg.steady_state()
 
-print('1')
 with open(f'result/{name}.file', 'wb') as f:
     pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
 
@@ -41,15 +40,15 @@ bot.clean_tmp_dir()
 t_0=1
 for i in range(niter_transition):
     for t in range(olg.T):
-        gov_const = olg.gov_const
+        gov_ratio = olg.gov_ratio[0]
         olg.update_government(t)
 
         if olg.gov_adaptation_time is not None:
                 for _ in range(niter_steady):
                     olg.steady_state()
-                    olg.create_guess(t_0=self.gov_adaptation_time,
+                    olg.create_guess(t_0=olg.gov_adaptation_time,
                                      steady_start = olg.T-50)
-        if gov_const != olg.gov_const:
+        if gov_ratio != olg.gov_ratio[0]:
             for _ in range(niter_steady):
                 olg.steady_state()
             olg.update_a_initial()

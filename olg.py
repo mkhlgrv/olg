@@ -11,7 +11,7 @@ import pickle
 import sys
 config.update("jax_enable_x64", True)
 config.update('jax_platform_name', 'cpu')
-
+import numpy as np
 from jax import jit, grad, jacfwd, jacrev
 
 from guess_plot import *
@@ -27,7 +27,7 @@ plt.rc('legend', fontsize=12)
 
 
 class OLG_model:
-    def __init__(self, G=60,T=250,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,
+    def __init__(self, G=60,T=250,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.05,
                  gov_strategy="unbalanced",gov_retirement_strategy="unbalanced",
                  tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho, beta=0.93, phi=0.23 ,theta =1., psi=24., omega=0.269, alpha=0.35,gov_ratio=0.2,
                  delta=0.0608, A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial, eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
@@ -88,6 +88,7 @@ class OLG_model:
         self.last_guess = None
         self.gov_strategy = gov_strategy
         self.gov_retirement_strategy = gov_retirement_strategy
+        self.acceptable_deficit_ratio=acceptable_deficit_ratio
 
         self.eta = eta
         self.steady_max_iter = steady_max_iter

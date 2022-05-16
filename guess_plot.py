@@ -1,4 +1,5 @@
 import matplotlib.pyplot as plt
+import numpy as np
 class Guess_plot:
     def __init__(self,olg, t_0, t_1):
         self.olg=olg
