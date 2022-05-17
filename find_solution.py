@@ -2,7 +2,7 @@ from olg import *
 name = str(sys.argv[1])
 gov_strategy = str(sys.argv[2])
 gov_retirement_strategy = str(sys.argv[3])
-niter_steady=2
+niter_steady=20
 niter_transition=100
 
 progress_bar = tqdm(desc = f'{name} {pb_iteration}',
@@ -41,7 +41,7 @@ t_0=1
 for i in range(niter_transition):
     for t in range(olg.T):
         gov_ratio = olg.gov_ratio[0]
-        olg.update_government(t)
+        olg.update_government(t, i)
         if gov_ratio != olg.gov_ratio[0]:
             print("correcting inital Gov")
             for _ in range(niter_steady):

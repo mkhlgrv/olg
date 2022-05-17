@@ -198,7 +198,7 @@ class OLG_model:
         
         self.history = {t:[] for t in range(max_time)}
           
-    def update_government(self, t):
+    def update_government(self, t,i=0):
         def gov_outcome(self,t):
             if t == 0:
                 Gov_Outcome = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+self.r[t]*self.initial["Debt"]
@@ -224,7 +224,7 @@ class OLG_model:
         
         self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
         
-        if (t>0) and self.gov_retirement_strategy != "unbalanced":
+        if (t>0) and self.gov_retirement_strategy != "unbalanced" and i != 0:
             if self.gov_retirement_strategy == "fixed_tau_rho":
                 self.sigma[t] = self.Rho_sum[t]/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
             if self.gov_retirement_strategy == "fixed_sigma":
@@ -253,7 +253,7 @@ class OLG_model:
         if t==0 and abs(self.Deficit_ratio[t]-self.deficit_ratio_initial)>0.00005:
             self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]-self.deficit_ratio_initial)
             
-        if (t>0) and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio):
+        if (t>0) and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio) and i !=0:
             fiscal_gap = self.Deficit[t]+0.01*self.GDP[t]
             if (self.gov_strategy == "adaptive_sigma"):
                 self.sigma[t:max_time] = self.sigma[t:max_time]+\
