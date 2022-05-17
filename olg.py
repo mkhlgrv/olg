@@ -255,10 +255,6 @@ class OLG_model:
             
         if (t>0) and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio):
             fiscal_gap = self.Deficit[t]+0.01*self.GDP[t]
-            print(self.Deficit_ratio[t])
-            print(self.gov_ratio[t])
-            print(self.Gov_Income[t])
-            print(self.Gov_Outcome[t])
             if (self.gov_strategy == "adaptive_sigma"):
                 self.sigma[t:max_time] = self.sigma[t:max_time]+\
                 fiscal_gap/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
