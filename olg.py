@@ -225,6 +225,7 @@ class OLG_model:
                 self.tau_rho[t] = self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
                 /(L[t]*w[t])* (1+self.tau_Ins[t]) /(1-self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
                                                     /(L[t]*w[t]))
+                self.update_government(t)
                 
             
         
@@ -259,7 +260,7 @@ class OLG_model:
                 self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]+0.01)
             if self.gov_strategy == "adaptive_tau_rho":
                 self.tau_rho[t:max_time] = np.array([(fiscal_gap + self.Rho_sum[t] * (1+self.tau_Ins[t]))/(L[t] * w[t] - self.Rho_sum[t] ) for _ in range(max_time-t)])
-                
+            self.update_government(t)
             self.gov_adaptation_time = t
                 
                 
