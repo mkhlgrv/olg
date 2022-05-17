@@ -2,7 +2,7 @@ from olg import *
 name = str(sys.argv[1])
 gov_strategy = str(sys.argv[2])
 gov_retirement_strategy = str(sys.argv[3])
-niter_steady=30
+niter_steady=2
 niter_transition=100
 
 progress_bar = tqdm(desc = f'{name} {pb_iteration}',
@@ -42,20 +42,21 @@ for i in range(niter_transition):
     for t in range(olg.T):
         gov_ratio = olg.gov_ratio[0]
         olg.update_government(t)
-
-        if olg.gov_adaptation_time is not None:
-            print("gov adaptation ...")
-            for _ in range(niter_steady):
-                olg.steady_state()
-                olg.create_guess(t_0=olg.gov_adaptation_time,
-                                     steady_start = olg.T-50)
         if gov_ratio != olg.gov_ratio[0]:
             print("correcting inital Gov")
             for _ in range(niter_steady):
                 olg.steady_state()
             olg.update_a_initial()
             olg.create_guess(t_0=olg.T-100,steady_start = olg.T-50)
-        olg.update_government(t)
+        print(olg.gov_adaptation_time)
+        if olg.gov_adaptation_time is not None:
+            print("gov adaptation ...")
+            for _ in range(niter_steady):
+                olg.steady_state()
+                
+            olg.create_guess(t_0=olg.gov_adaptation_time,
+                                     steady_start = max(min(olg.T,olg.gov_adaptation_time+50), olg.T-50))
+            olg.gov_adaptation_time = None
     for t in range(t_0, olg.T):
         olg.update_household(t, t)
     progress_bar.refresh(nolock=True)

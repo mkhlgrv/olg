@@ -199,7 +199,13 @@ class OLG_model:
         self.history = {t:[] for t in range(max_time)}
           
     def update_government(self, t):
-
+        def gov_outcome(self,t):
+            if t == 0:
+                Gov_Outcome = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+self.r[t]*self.initial["Debt"]
+            else:
+                Gov_Outcome = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+self.r[t]*self.Debt[t-1]
+            return Gov_Outcome
+                
         self.GDP[t] = self.Oil[t]+\
         np.sum(np.array([self.price_N[t], self.price_E[t]])*\
         self.K[:,t]**self.alpha * (self.A[:,t]*self.L[:,t])**(1-self.alpha)/self.price[t])
@@ -218,14 +224,15 @@ class OLG_model:
         
         self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
         
-        if self.gov_retirement_strategy != "unbalanced":
+        if (t>0) and self.gov_retirement_strategy != "unbalanced":
             if self.gov_retirement_strategy == "fixed_tau_rho":
                 self.sigma[t] = self.Rho_sum[t]/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
             if self.gov_retirement_strategy == "fixed_sigma":
                 self.tau_rho[t] = self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
                 /(L[t]*w[t])* (1+self.tau_Ins[t]) /(1-self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
                                                     /(L[t]*w[t]))
-                self.update_government(t)
+                self.Rho_sum = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
+                self.gov_adaptation_time=t
                 
             
         
@@ -238,12 +245,7 @@ class OLG_model:
             
         self.Gov_Income[t] = self.VA_sum[t] + self.I_sum[t]+self.II_sum[t]+self.Ins_sum[t]+self.Rho_sum[t]+self.Pi_sum[t]+\
         self.Oil[t]
-        if t == 0:
-            self.Gov_Outcome[t] = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+\
-                self.r[t]*self.initial["Debt"]
-        else:
-            self.Gov_Outcome[t] = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+\
-                self.r[t]*self.Debt[t-1]
+        self.Gov_Outcome[t] = gov_outcome(self,t)
         self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
         self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
         
@@ -251,16 +253,28 @@ class OLG_model:
         if t==0 and abs(self.Deficit_ratio[t]-self.deficit_ratio_initial)>0.00005:
             self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]-self.deficit_ratio_initial)
             
-        if abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio:
-            fiscal_gap = self.Deficit+0.01*self.GDP[t]
+        if (t>0) and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio):
+            fiscal_gap = self.Deficit[t]+0.01*self.GDP[t]
+            print(self.Deficit_ratio[t])
+            print(self.gov_ratio[t])
+            print(self.Gov_Income[t])
+            print(self.Gov_Outcome[t])
             if (self.gov_strategy == "adaptive_sigma"):
                 self.sigma[t:max_time] = self.sigma[t:max_time]+\
                 fiscal_gap/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
+                self.Gov_Outcome[t] = gov_outcome(self,t)
             if self.gov_strategy == "adaptive_gov":
                 self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]+0.01)
+                self.Gov[t] = self.gov_ratio[t]*self.GDP[t]+self.Oil[t]
+                self.Gov_Outcome[t] = gov_outcome(self,t)
+                
             if self.gov_strategy == "adaptive_tau_rho":
                 self.tau_rho[t:max_time] = np.array([(fiscal_gap + self.Rho_sum[t] * (1+self.tau_Ins[t]))/(L[t] * w[t] - self.Rho_sum[t] ) for _ in range(max_time-t)])
-            self.update_government(t)
+                self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
+                self.Gov_Income[t] = self.VA_sum[t] + self.I_sum[t]+self.II_sum[t]+self.Ins_sum[t]+self.Rho_sum[t]+self.Pi_sum[t]+self.Oil[t]
+            self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
+            self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
+                
             self.gov_adaptation_time = t
                 
                 
@@ -341,6 +355,14 @@ class OLG_model:
     def steady_state(self):
 
         w_steady, price_steady, price_N_steady = self.steady[3:6]
+        if self.gov_retirement_strategy != "unbalanced":
+            if self.gov_retirement_strategy == "fixed_tau_rho":
+                self.sigma[self.T] = self.tau_rho[self.T]/(1+self.tau_rho[self.T] + self.tau_Ins[self.T]) * self.Labor[self.T] * self.w[self.T]/(self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T]))
+                
+        if self.gov_retirement_strategy == "fixed_sigma":
+            self.tau_rho[self.T] = self.sigma[self.T]*self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T])\
+                /(L[self.T]*w[self.T])* (1+self.tau_Ins[self.T]) /(1-self.sigma[self.T]*self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T])/(L[self.T]*w[self.T]))
+                
 
         for t in range(self.T-self.G + 1, max_time):
             self.w[t] = w_steady* self.A_growth**(t - self.T)
