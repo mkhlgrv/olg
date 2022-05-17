@@ -45,9 +45,9 @@ for i in range(niter_transition):
 
         if olg.gov_adaptation_time is not None:
             print("gov adaptation ...")
-                for _ in range(niter_steady):
-                    olg.steady_state()
-                    olg.create_guess(t_0=olg.gov_adaptation_time,
+            for _ in range(niter_steady):
+                olg.steady_state()
+                olg.create_guess(t_0=olg.gov_adaptation_time,
                                      steady_start = olg.T-50)
         if gov_ratio != olg.gov_ratio[0]:
             print("correcting inital Gov")
