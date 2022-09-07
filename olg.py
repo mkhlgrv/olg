@@ -21,16 +21,22 @@ from default_value import *
 def labor_income_vector(self, s, g, start, end):
     return (1-self.tau_I[start:end]) * (1-(self.tau_rho[start:end] + self.tau_Ins[start:end])/(1+self.tau_rho[start:end] + self.tau_Ins[start:end])) * self.epsilon[s,g,start:end] * self.w[start:end]
 
-
 plt.rc('legend', fontsize=12) 
 
 
 
 class OLG_model:
-    def __init__(self, G=60,T=250,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.05,
+    def __init__(self, G=60,T=200,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.1,
                  gov_strategy="unbalanced",gov_retirement_strategy="unbalanced",
-                 tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho, beta=0.93, phi=0.23 ,theta =1., psi=24., omega=0.269, alpha=0.35,gov_ratio=0.2,
-                 delta=0.0608, A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial, eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
+                 tax_sensitivity = {"VA_squared":0., "VA":0., "I":0., "I_squared":0.},
+                 target_debt_to_gdp = 0.1,
+                 tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho
+                 , beta=.955
+                 , phi=0.225
+                 ,theta =1., psi=24., omega=0.269, alpha=0.35
+                 , rho_lamp_sum_coef = rho_lamp_sum_coef
+                 , delta=0.09#0.0608
+                 , A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial, eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
         """
         OLG model
         :param G: number of generations, default is 110
@@ -80,8 +86,12 @@ class OLG_model:
         # Production
         self.psi, self.alpha, self.delta, self.A = psi, alpha, delta, A
 
-        self.a_initial_sum = initial["a_initial_sum"]
-        self.a_initial = np.zeros(shape=(2,max_time))
+#         self.a_initial_sum = initial["a_initial_sum"]
+#         self.a_initial = np.zeros(shape=(2,max_time))
+
+        self.tax_sensitivity = tax_sensitivity
+        self.rho_lamp_sum_coef = rho_lamp_sum_coef
+        self.target_debt_to_gdp = target_debt_to_gdp
         
         self.initial = initial
 
@@ -104,33 +114,18 @@ class OLG_model:
         self.Debt = np.array([initial["Debt"] for _ in range(max_time)])
         
         
-        self.VA_sum= np.zeros_like(self.Debt)
-        self.I_sum= np.zeros_like(self.Debt)
-        self.II_sum= np.zeros_like(self.Debt)
-        
-        self.Ins_sum= np.zeros_like(self.Debt)
-        self.Rho_sum= np.zeros_like(self.Debt)
-        self.Pi_sum= np.zeros_like(self.Debt)
         self.Oil = Oil
         self.deficit_ratio_initial = deficit_ratio_initial
-            
-        self.Gov_Income= np.zeros_like(self.Debt)
-        self.gov_ratio = np.array([gov_ratio for _ in range(max_time)])
         
-        self.Gov_Outcome= np.zeros_like(self.Debt)
-        self.Deficit= np.zeros_like(self.Debt)
-        self.Deficit_ratio= np.zeros_like(self.Debt)
+        
+            
 
         self.lmbda = np.array([[0.5 for _ in range(max_time)] for _ in range(2)])
 
         self.w = np.ones_like(self.Debt)
-#         ((self.price_N *(1-self.alpha)*(self.K[0])**self.alpha *(self.A[0])**(1-self.alpha)*(self.L[0])**(-self.alpha))+
-#         (self.price_E *(1-self.alpha)*(self.K[1])**self.alpha *(self.A[1])**(1-self.alpha)*(self.L[1])**(-self.alpha)))/2
 
-        self.price = np.ones_like(self.w)#(self.price_M)**self.omega * (self.price_N)**(1-self.omega)
+        self.price = np.ones_like(self.w)
 
-
-        self.Y = self.K**self.alpha * (self.L*self.A)**(1-self.alpha)
 
         
         self.k = np.ones_like(self.K)
@@ -164,7 +159,6 @@ class OLG_model:
 
         Consumption = np.array([np.sum([self.c[s,g,t]*self.N[s,g,t] for g in range(max_time) for s in range(2)]) for t in range(max_time)])
         self.Consumption = Consumption
-        self.Consumption[0] = initial["C"]
         Labor = np.array([np.sum([self.l[s,g,self.T]*self.N[s,g,self.T]*self.epsilon[s,g,self.T] for g in range(max_time) for s in range(2)]) for t in range(max_time)])
         self.Labor = Labor
         
@@ -174,114 +168,231 @@ class OLG_model:
         self.Assets = Assets
 
         
-        self.steady = np.array(list(steady_guess) + [Consumption[self.T], Labor[self.T], Assets[self.T]])
+        self.steady = steady_guess
         self.steady_path = []
         
         self.A_growth = self.A[0,self.T]/self.A[0, self.T-1]
         self.N_growth = np.sum([self.N[s,g,self.T]*self.epsilon[s,g,self.T] for g in range(self.T, self.G+self.T) for s in range(2)])/\
                    np.sum([self.N[s,g,self.T-1]*self.epsilon[s,g,self.T-1] for g in range(self.T-1, self.G+self.T-1) for s in range(2)])
+        self.potential_growth = np.concatenate(([1.],
+                                               (self.N[:,:,1:]*self.epsilon[:,:,1:]).sum(axis=(0,1))*self.A[0,1:]/\
+                                               ((self.N[:,:,0]*self.epsilon[:,:,0]).sum(axis=(0,1)))))
+        self.history = {t:[]for t in range(max_time)}
+
+    @property
+    def Y(self):
+        return self.K**self.alpha * (self.L*self.A)**(1-self.alpha)
+    @property
+    def lmbda_to_price_steady(self):
+        return (1+self.tau_VA[self.T])/((1 - self.psi/2 * (self.A_growth*self.N_growth -1)**2 - self.psi*self.A_growth*self.N_growth * (self.A_growth*self.N_growth -1))+self.psi/(1+self.r[self.T+1]) * (self.A_growth*self.N_growth -1)* (self.A_growth*self.N_growth)**2)
+
+    @property
+    def i_steady(self):
+        return (self.A_growth*self.N_growth-1+self.delta) / (1-self.psi/2*(self.A_growth*self.N_growth -1)**2)
+
+    @property 
+    def D(self):
+        return self.Consumption+self.I.sum(axis=0)
+
+    @property 
+    def M(self):
+        return self.omega * self.D * self.price / self.price_M
+    
+    @property 
+    def lamp_sum_tax(self):
+        return self.initial["lamp_sum_tax"]*self.A[0]
+    @property 
+    def lamp_sum_tax_total(self):
+        return self.lamp_sum_tax*self.N.sum(axis=(0,1))
+
+    @property
+    def Gov(self):
+        return self.initial["Gov"]*self.potential_growth
+    @property
+    def Rho_lamp_sum(self):
+        return self.initial["Rho_lamp_sum"]*self.potential_growth*self.rho_lamp_sum_coef
+
+
+    @property
+    def GDP(self):
+        return self.Oil+self.Y.sum(axis=0)
+    @property
+    def Gov_to_GDP(self):
+        return self.Gov/self.GDP
+
+    @property
+    def VA_sum(self):
+        return self.tau_VA*self.price*(self.Consumption+self.I.sum(axis=0))
+    @property
+    def II_sum(self):
+        return self.tau_II*np.concatenate(([self.A[0,0]],self.A[0,:-1]))
+    @property
+    def I_sum(self):
+        return self.Labor * self.w *(1-(self.tau_rho + self.tau_Ins)/(1+self.tau_rho + self.tau_Ins)) *\
+                    self.tau_I
+    @property
+    def Ins_sum(self):
+        return self.Labor * self.w *self.tau_Ins/(1+self.tau_rho + self.tau_Ins)
+    @property
+    def Rho_sum(self):
+        return self.tau_rho/(1+self.tau_rho + self.tau_Ins) * self.Labor * self.w
+    @property 
+    def Pi_sum(self):
+        return self.tau_pi * ([self.price_N,self.price_E]  * self.K**self.alpha *\
+                                           (self.L*self.A)**(1-self.alpha) -
+                                 self.w*self.L - self.delta * self.price*self.K).sum(axis=0)
+    @property
+    def Gov_Income(self):
+        return self.VA_sum + self.I_sum+self.II_sum+self.Ins_sum+self.Rho_sum+self.Pi_sum+self.Oil
+    
+    @property
+    def Rho_Outcome(self):
+        return self.sigma*self.w * (self.rho*self.N).sum(axis=(0,1))+self.Rho_lamp_sum
+    
+    @property
+    def Gov_Outcome(self):
+        return self.price_N*self.Gov +self.Rho_Outcome-self.Rho_lamp_sum+\
+    self.r*np.concatenate(([self.initial["Debt"]],self.Debt[:-1]))+\
+        self.lamp_sum_tax_total
+    
+    @property
+    def Deficit(self):
+        return self.Gov_Outcome - self.Gov_Income
+    @property
+    def Deficit_rho(self):
+        return self.Rho_Outcome-self.Rho_sum
+    @property 
+    def Deficit_rho_to_GDP(self):
+        return self.Deficit_rho/self.GDP
+    
+    @property
+    def Debt_to_GDP(self):
+        return self.Debt/self.GDP
+    
+    @property
+    def Deficit(self):
+        return self.Gov_Outcome - self.Gov_Income
+    
+    @property
+    def Deficit_to_GDP(self):
+        return self.Deficit/self.GDP
+        
+        
+    def copy(self,model):
+
+        self.w = model.w
+        self.price= model.price
+        self.price_N = model.price_N
+
+        self.k = model.k
+        self.i = model.i
+
+        self.L_share = model.L_share
+
+        self.lmbda_to_price =  model.lmbda_to_price
+
+        self.K = model.K
+        self.I = model.I
+        self.L = model.L
+        self.lmbda = model.lmbda
+        self.Consumption = model.Consumption
+        self.Labor = model.Labor
+        self.Assets = model.Assets
+        self.c = model.c
+        self.l = model.l
+        self.a = model.a
+        self.sigma = model.sigma
+        self.rho = model.rho
+        
+        self.tau_rho = model.tau_rho
+        self.rho_lamp_sum_coef=model.rho_lamp_sum_coef
+        self.tau_VA = model.tau_VA
+        self.tau_I = model.tau_I
+        self.Debt = model.Debt
+        self.steady = model.steady
+        
         
 
-        self.lmbda_to_price_steady = (1+self.tau_VA[self.T])/((1 - self.psi/2 * (self.A_growth*self.N_growth -1)**2 - self.psi*self.A_growth*self.N_growth * (self.A_growth*self.N_growth -1))+self.psi/(1+self.r[self.T+1]) * (self.A_growth*self.N_growth -1)* (self.A_growth*self.N_growth)**2)
-        self.i_steady  = (self.A_growth*self.N_growth-1+self.delta) / (1-self.psi/2*(self.A_growth*self.N_growth -1)**2)
         
-        self.D = self.Consumption+self.I[0]+self.I[1]
-        
-        self.M = self.omega * self.D * self.price / self.price_M
-        
-        self.Gov = np.zeros(max_time)
-        self.Gov[0] = self.initial["Gov"]
-        
-            
-        self.GDP = np.ones_like(self.Gov)
-#         self.D+ self.price_N/self.price * self.Gov+self.Oil
-        
-        self.history = {t:[] for t in range(max_time)}
-          
+
     def update_government(self, t,i=0):
-        def gov_outcome(self,t):
-            if t == 0:
-                Gov_Outcome = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+self.r[t]*self.initial["Debt"]
+            
+        def reaction_function(self, t):
+            if t>0:
+                debt_deviation = (self.Debt[t-1]/self.GDP[t-1] - self.target_debt_to_gdp)
+                if debt_deviation > 0:
+                    debt_deviation_sq = debt_deviation**2
+                else:
+                    debt_deviation_sq = 0.
+                I = min(self.tau_I[0]+self.tax_sensitivity["I"]*debt_deviation + self.tax_sensitivity["I_squared"]*debt_deviation_sq, 0.8)
+                VA = min(self.tau_VA[0]+self.tax_sensitivity["VA"]*debt_deviation + self.tax_sensitivity["VA_squared"]*debt_deviation_sq, 0.8)
+                return I, VA
             else:
-                Gov_Outcome = self.price_N[t]*self.Gov[t] + self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])+self.r[t]*self.Debt[t-1]
-            return Gov_Outcome
+                return self.tau_I[t], self.tau_VA[t]
+            
+        self.tau_I[t], self.tau_VA[t] = reaction_function(self, t)
                 
-        self.GDP[t] = self.Oil[t]+\
-        np.sum(np.array([self.price_N[t], self.price_E[t]])*\
-        self.K[:,t]**self.alpha * (self.A[:,t]*self.L[:,t])**(1-self.alpha)/self.price[t])
+
         
-        self.Gov[t] =  self.gov_ratio[t]*self.GDP[t]+self.Oil[t]
-        self.VA_sum[t] = self.tau_VA[t]*self.price[t]*(self.Consumption[t]+self.I[0,t]+self.I[1, t])
-        self.II_sum[t] = self.tau_II[t]*self.Assets[t]
-        self.I_sum[t] = self.Labor[t] * self.w[t] *\
-                        (1-(self.tau_rho[t] + self.tau_Ins[t])/\
-                         (1+self.tau_rho[t] + self.tau_Ins[t])) *\
-                        self.tau_I[t] 
-        
-        
-        
-        self.Ins_sum[t] = self.tau_Ins[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
-        
-        self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
-        
-        if (t>0) and self.gov_retirement_strategy != "unbalanced" and i != 0:
-            if self.gov_retirement_strategy == "fixed_tau_rho":
-                self.sigma[t] = self.Rho_sum[t]/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
-            if self.gov_retirement_strategy == "fixed_sigma":
-                self.tau_rho[t] = self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
-                /(L[t]*w[t])* (1+self.tau_Ins[t]) /(1-self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
-                                                    /(L[t]*w[t]))
-                self.Rho_sum = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
-                self.gov_adaptation_time=t
+#         if (t>0) and self.gov_retirement_strategy != "unbalanced" and i != 0:
+#             if self.gov_retirement_strategy == "fixed_tau_rho":
+#                 self.sigma[t] = self.Rho_sum[t]/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
+#             if self.gov_retirement_strategy == "fixed_sigma":
+#                 self.tau_rho[t] = self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
+#                 /(L[t]*w[t])* (1+self.tau_Ins[t]) /(1-self.sigma[t]*self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])\
+#                                                     /(L[t]*w[t]))
+#                 self.Rho_sum = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
+#                 self.gov_adaptation_time=t
                 
             
-        
-        self.Pi_sum[t] = self.tau_pi[t] * (self.price[t] * self.K[0,t]**self.alpha *\
-                                           (self.L[0,t]*self.A[0,t])**(1-self.alpha) -\
-        self.w[t]*self.L[0,t] - self.delta * self.price[t]*self.K[0,t])+\
-            self.tau_pi[t] * (self.price[t] * self.K[1,t]**self.alpha *\
-                                           (self.L[1,t]*self.A[1,t])**(1-self.alpha) -\
-            self.w[t]*self.L[1,t] - self.delta * self.price[t]*self.K[1,t])
             
-        self.Gov_Income[t] = self.VA_sum[t] + self.I_sum[t]+self.II_sum[t]+self.Ins_sum[t]+self.Rho_sum[t]+self.Pi_sum[t]+\
-        self.Oil[t]
-        self.Gov_Outcome[t] = gov_outcome(self,t)
-        self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
-        self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
         
         
-        if t==0 and abs(self.Deficit_ratio[t]-self.deficit_ratio_initial)>0.00005:
-            self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]-self.deficit_ratio_initial)
+        
+#         if (i==0) and (t==0) and abs(self.Deficit_to_GDP[t]-self.deficit_ratio_initial)>0.00005:
+#             self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]-self.deficit_ratio_initial)
             
-        if (t>0) and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio) and i !=0:
+        if (t>10) and (self.gov_strategy != "unbalanced") and (abs(self.Deficit_ratio[t])>self.acceptable_deficit_ratio) and i !=0:
+            print('1')
             fiscal_gap = self.Deficit[t]+0.01*self.GDP[t]
             if (self.gov_strategy == "adaptive_sigma"):
-                self.sigma[t:max_time] = self.sigma[t:max_time]+\
-                fiscal_gap/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t]))
-                self.Gov_Outcome[t] = gov_outcome(self,t)
-            if self.gov_strategy == "adaptive_gov":
-                self.gov_ratio[t:max_time] = self.gov_ratio[t:max_time] - (self.Deficit_ratio[t]+0.01)
-                self.Gov[t] = self.gov_ratio[t]*self.GDP[t]+self.Oil[t]
-                self.Gov_Outcome[t] = gov_outcome(self,t)
+                self.sigma[t:max_time] = np.array([self.sigma[t]+\
+                fiscal_gap/(self.w[t] * np.sum(self.rho[:,:,t]*self.N[:,:,t])) for _ in range(t, max_time)])
+#             if self.gov_strategy == "adaptive_gov":
+#                 self.gov_ratio[t:max_time] = np.array([self.gov_ratio[t] - (self.Deficit_ratio[t]+0.01) for _ in range(t, max_time)])
+#                 self.Gov_Outcome[t] = gov_outcome(self,t)
+#                 self.Rho_Outcome[t] = rho_outcome(self, t)
                 
             if self.gov_strategy == "adaptive_tau_rho":
                 self.tau_rho[t:max_time] = np.array([(fiscal_gap + self.Rho_sum[t] * (1+self.tau_Ins[t]))/(L[t] * w[t] - self.Rho_sum[t] ) for _ in range(max_time-t)])
-                self.Rho_sum[t] = self.tau_rho[t]/(1+self.tau_rho[t] + self.tau_Ins[t]) * self.Labor[t] * self.w[t]
-                self.Gov_Income[t] = self.VA_sum[t] + self.I_sum[t]+self.II_sum[t]+self.Ins_sum[t]+self.Rho_sum[t]+self.Pi_sum[t]+self.Oil[t]
-            self.Deficit[t] = self.Gov_Outcome[t] - self.Gov_Income[t]
-            self.Deficit_ratio[t] = self.Deficit[t]/(self.Consumption[t]+np.sum(self.I[:,t])+self.Gov[t])
+
+            if self.gov_strategy == "adaptive_tau_VA":
+                if self.tau_VA[t+1]==self.tau_VA[t]:
+                    self.tau_VA[(t+1):max_time] =np.sign(self.Deficit_ratio[t])* 0.1+self.tau_VA[(t+1):max_time]
                 
+#             if self.gov_strategy == "adaptive_gov_smoothed":
+#                 if np.sign(self.Deficit_ratio[t]) == 1:
+#                     self.gov_ratio[t:max_time] = max(0.2, self.gov_ratio[t-1] - 0.02)
+#                 else:
+#                     self.gov_ratio[t:max_time] = min(0.4, self.gov_ratio[t-1] + 0.02)
+                
+
             self.gov_adaptation_time = t
+        if (t>10) and (self.gov_strategy != "unbalanced") and (abs(self.Deficit_ratio[t])<=self.acceptable_deficit_ratio) and i !=0:
+#             if self.gov_strategy == "adaptive_gov_smoothed":
+#                 self.gov_ratio[t] = self.gov_ratio[t-1]
+#                 self.gov_adaptation_time = t
+            if self.gov_strategy == "adaptive_tau_VA":
+                if self.tau_VA[t+1]!=self.tau_VA[t]:
+                    self.tau_VA[t+1] = self.tau_VA[t]
+                    self.gov_adaptation_time = t
                 
-                
+                    
         if t == 0:
             self.Debt[t] = self.initial["Debt"]+self.Deficit[t]
         else:
             self.Debt[t] = self.Debt[t-1]+self.Deficit[t]
         
-        
-
-
 
     def household(self, s, g, t, t_0=None):
         def cumulative_rate_of_return(self,start, end):
@@ -290,16 +401,13 @@ class OLG_model:
             else:
                 return 1
 
-        def get_initial_consumption(self, s, g, t_0):
-            
-            if t_0==0:
-                a_init = self.a_initial[s,g]
-            else:
-                a_init = self.a[s,g,t_0-1]
 
-            return (a_init * cumulative_rate_of_return(self, t_0, g+1)+
+        def get_initial_consumption(self, s, g, t_0):
+
+            return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
                                np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
                                       (labor_income_vector(self, s, g, t_0, g+1)+\
+                                       self.lamp_sum_tax[t_0:( g+1)]+
                                        self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
                                        )))/\
                    (1/(1-self.phi)*np.sum(
@@ -338,10 +446,10 @@ class OLG_model:
             else:
                 
                 labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
-            if t == 0:
-                        assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+self.a_initial[s,g]*(1+self.r[t]*(1-self.tau_II[t]))
-            else:
-                        assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+(self.a[s,g, t-1]+bequest)*(1+self.r[t]*(1-self.tau_I[t]))
+#             if t == 1:
+#                         assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+self.a_initial[s,g]*(1+self.r[t]*(1-self.tau_II[t]))
+#             else:
+            assets = self.lamp_sum_tax[t]+labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+(self.a[s,g, t-1]+bequest)*(1+self.r[t]*(1-self.tau_I[t]))
             return consumption, labor, assets
         else:
             return np.array([0,0,0])
@@ -353,10 +461,10 @@ class OLG_model:
         w_steady, price_steady, price_N_steady = self.steady[3:6]
         if self.gov_retirement_strategy != "unbalanced":
             if self.gov_retirement_strategy == "fixed_tau_rho":
-                self.sigma[self.T] = self.tau_rho[self.T]/(1+self.tau_rho[self.T] + self.tau_Ins[self.T]) * self.Labor[self.T] * self.w[self.T]/(self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T]))
+                self.sigma[self.T:max_time] = self.tau_rho[self.T]/(1+self.tau_rho[self.T] + self.tau_Ins[self.T]) * self.Labor[self.T] * self.w[self.T]/(self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T]))
                 
         if self.gov_retirement_strategy == "fixed_sigma":
-            self.tau_rho[self.T] = self.sigma[self.T]*self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T])\
+            self.tau_rho[self.T:max_time] = self.sigma[self.T]*self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T])\
                 /(L[self.T]*w[self.T])* (1+self.tau_Ins[self.T]) /(1-self.sigma[self.T]*self.w[self.T] * np.sum(self.rho[:,:,self.T]*self.N[:,:,self.T])/(L[self.T]*w[self.T]))
                 
 
@@ -387,19 +495,25 @@ class OLG_model:
 
         if len(self.steady_path)==0:
             self.steady[-3:] = np.array([Consumption,  Labor, Assets])
+            gov = 0.05
         else:
             self.steady[-3:] = self.eta*np.array([Consumption,  Labor, Assets]) + (1-self.eta)*self.steady[-3:]
+        
+            self.K[0,self.T] = self.steady[0]* Labor * self.A[0,self.T] 
+            self.K[1,self.T] = self.steady[2]* Labor * self.A[0,self.T]
             
-        gov = self.gov_ratio[self.T]*((self.steady[0]+self.steady[2])**self.alpha+\
-                              (self.Oil[self.T])/(self.A[0,self.T]*self.steady[-2]))
+            self.I[0,self.T] = self.i_steady * self.K[0,self.T]
+            self.I[1,self.T] = self.i_steady* self.K[1,self.T]
+            
+            self.L[0,self.T] = self.steady[1] * Labor 
+            self.L[1,self.T] = (1-self.steady[1]) * Labor
+ 
 
+            gov = self.Gov[self.T]/(self.A[0,self.T]*self.steady[-2])
 
         z_guess = self.steady[:6]
         
-        
         def equilibrium(z, self=self, objective = True):
-
-
   
             system = [
                 f"{1-self.alpha}*price_N_steady * (k_N_steady/L_N_share)**{self.alpha}- w_steady/{self.A[0,self.T]}"
@@ -454,6 +568,7 @@ class OLG_model:
         k_N_steady, L_N_share, k_E_steady, w_steady, price_steady, price_N_steady, Consumption_steady, Labor_steady, Assets_steady = self.steady
         if steady_start is None:
             steady_start = self.T-self.G
+
         
         for t in range(steady_start, max_time):
             
@@ -492,6 +607,8 @@ class OLG_model:
             self.Consumption[t] = Consumption_steady*(self.A_growth*self.N_growth)**(t - self.T)
             self.Labor[t] = Labor_steady*(self.N_growth)**(t - self.T)
             self.Assets[t] =  Assets_steady*(self.A_growth*self.N_growth)**(t - self.T)
+            
+            
         
         
         
@@ -542,6 +659,10 @@ class OLG_model:
         self.lmbda_to_price[1,t_0:steady_start] = self.lmbda_to_price_steady
         self.lmbda[0,t_0:steady_start] = self.price[t_0:steady_start]*self.lmbda_to_price_steady
         self.lmbda[1,t_0:steady_start] = self.price[t_0:steady_start]*self.lmbda_to_price_steady
+#         if t_0==1:
+#             for s in range(2):
+#                 for g in range(self.G):
+#                     self.c[s, g, 0], self.l[s,g,0], self.a[s,g,0] = self.household(s,g,0, 0)
         for t in range(t_0,self.T):
             for s in range(2):
                 for g in range(t, self.G+t):
@@ -580,16 +701,18 @@ class OLG_model:
                                                  (self.A[0,t]*self.Labor[t]) +self.i[0,t]*self.k[0,t] + self.i[1,t]*self.k[1,t]))
 
     def update_a_initial(self):
+        self.Assets[0] = self.steady[-1]/self.steady[-3] * self.Consumption[0]
         coef = np.sum(self.a[:,self.G+self.T-2:self.T-1:-1,self.T]*\
-                      self.N[:,self.G+0-2::-1,0])/self.a_initial_sum
+                      self.N[:,self.G+0-2::-1,0])/self.Assets[0]
         
-        self.a_initial[:,self.G-2::-1]=self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
+#         self.a_initial[:,self.G-2::-1]=self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
+        self.a[:,self.G-2::-1,0] = self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
         
 
     def update_household(self,t, t_0=None):              
         for s in range(2):
             for g in range(t, self.G+t):
-                self.c[s, g, t],self.l[s, g, t],self.a[s, g,t]  = self.household(s,g,t,t_0)
+                self.c[s, g, t],self.l[s, g, t],self.a[s, g,t]  = self.household(s,g,t,t)
 
         self.Consumption[t] = np.sum([self.c[s,g,t]*self.N[s,g,t] 
                                       for g in range(t, self.G+t) 
@@ -631,10 +754,10 @@ class OLG_model:
             system =(
               (1-self.alpha)*price_N  * (self.k[0, t]/L_N_share)**self.alpha - w/self.A[0, t]\
             )**2+\
-            ( (1+tau_VA[t])*price - lmbda_N_to_price * price* (1-self.psi/2 *(i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1)**2\
+            ( (1+self.tau_VA[t]) - lmbda_N_to_price* (1-self.psi/2 *(i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1)**2\
                - self.psi * (i_N/lag_i[0]*self.K[0,t]/lag_K[0]) * \
                                       (i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1) )-\
-               self.lmbda_to_price[0,t+1]*self.price[t+1]*self.psi/(1+self.r[t+1]) *\
+               self.lmbda_to_price[0,t+1]*self.price[t+1]/price*self.psi/(1+self.r[t+1]) *\
                (self.i[0,t+1]/i_N*k_N*self.A[0, t+1]*self.Labor[t+1]/self.K[0,t] )**2 *\
             (self.i[0,t+1]/i_N*k_N*self.A[0, t+1]*self.Labor[t+1]/self.K[0,t] -1)
             )**2+\
@@ -651,10 +774,10 @@ class OLG_model:
             (
             (1-self.alpha)*self.price_E[t] * (self.k[1, t]/(1-L_N_share)*self.A[0,t]/self.A[1,t])**self.alpha - w/ self.A[1, t] 
             )**2+\
-            ( (1+tau_VA[t])*price - lmbda_E_to_price*price * (1-self.psi/2 *(i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1)**2\
+            ( (1+self.tau_VA[t])- lmbda_E_to_price* (1-self.psi/2 *(i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1)**2\
                - self.psi * (i_E/lag_i[1]*self.K[1,t]/lag_K[1]) * \
                                       (i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1) )-\
-               self.lmbda_to_price[1,t+1]*self.price[t+1]*self.psi/(1+self.r[t+1]) *\
+               self.lmbda_to_price[1,t+1]*self.price[t+1]/price*self.psi/(1+self.r[t+1]) *\
                (self.i[1,t+1]/i_E*k_E*self.A[1, t+1]*self.Labor[t+1]/self.K[1,t] )**2 *\
             (self.i[1,t+1]/i_E*k_E*self.A[1, t+1]*self.Labor[t+1]/self.K[1,t] -1)
             )**2+\
@@ -729,3 +852,4 @@ class OLG_model:
         self.Y[:,t] = self.K[:,t]**self.alpha * (self.L[:,t]*self.A[:,t])**(1-self.alpha)
         self.D[t] = self.Consumption[t]+self.I[0,t]+self.I[1,t]
         self.M[t] =  self.omega * self.D[t] * self.price[t] / self.price_M[t]
+

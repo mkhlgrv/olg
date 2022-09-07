@@ -250,6 +250,16 @@ ggplot(melt(res$demography_rates$Fertility[c(1,10,50,100,200,200,200),1:55]))+
   geom_line(aes(x=Var2, y = value, group=Var1), alpha=0.2)
 # to Python
 res <- get.demographics(96,500,eps = c(rep(1, 50), rep(0, 46)), FALSE)
+
+
+Fertility =as.data.frame(res$Fertility))
+save(Fertility, file="Fertility.Rda")
+Mortality_male =as.data.frame(res$Mortality_male))
+save(Mortality_male, file="Mortality_male.Rda")
+Mortality_female =as.data.frame(res$Mortality_female))
+save(Mortality_female, file="Mortality_female.Rda")
+
+
 N_female_nm =as.data.frame(res$N_female)
 save(N_female_nm, file="N_female_non_migration.Rda")
 N_male_nm =as.data.frame(res$N_male)

@@ -2,113 +2,112 @@ from olg import *
 import argparse
 from os.path import exists
 
-name = sys.argv[1]
-action = sys.argv[2]
-input_name = sys.argv[3]
-t_0 = int(sys.argv[4])
-if input_name=="":
-    input_name = name
+import argparse
+
+parser = argparse.ArgumentParser(description='Find solution of olg model')
+parser.add_argument('output_name',  type=str, help = "output file name")
+parser.add_argument('-in','--input_name',  type=str, help = "input file name", default = "")
+parser.add_argument('-a','--action',  type=str, help = "c for continue, o for overwrite", default = "c")
+parser.add_argument('-t','--t_0',  type=int, help = "starting time", default = 1)
+parser.add_argument('-T','--T',  type=int, help = "steady time", default = 200)
+parser.add_argument('-r', '--reform',  type=str, help = "retirement system type", default = "")
+parser.add_argument('-nis','--niter_steady',  type=int, help = "Steady state niter", default = 1)
+parser.add_argument('-nit','--niter_transition',  type=int, help = "Transition path niter", default = 10)
+parser.add_argument('-v','--verbose',  type=int, help = "if 0, bot sends only last plot", default = 1)
+
+
+args = parser.parse_args()
+args.verbose = bool(args.verbose)
+print(args.verbose)
     
-file_name = f'result/{name}.file'   
-input_filename = f'result/{input_name}.file'
+file_name = f'result/{args.output_name}.file'   
+input_filename = f'result/{args.input_name}.file'
 
-keys = sys.argv[5::2]
-values = sys.argv[6::2]
-kwargs = {k:v for k, v in zip(keys, values)}
 
-niter_steady=30
-
-progress_bar = tqdm(desc = f'{name} {pb_iteration}',
+progress_bar = tqdm(desc = f'{args.output_name} {pb_iteration}',
                       total=None,
                           token=os.getenv('comp_bot_token'),
                           chat_id=os.getenv('chat_id')) 
-if exists(input_filename) and action == 'c' :
+if exists(input_filename) and args.action == 'c' :
+    
     with open(input_filename, 'rb') as f:
         input_model = pickle.load(f)
-        olg = OLG_model(**kwargs)
+        olg = OLG_model(T=args.T)
         olg.copy(input_model)
-        if "rho" in kwargs:
-            if kwargs["rho"] == "rho_reform":
-                olg.rho = rho_reform
+        if args.reform != '':
+            if args.reform == "reform":
+                olg.rho[:,:,args.t_0:] = rho_reform[:,:,args.t_0:]
                    
-            if kwargs["rho"] == "rho_reform_delayed":
-                olg.rho = rho_reform_delayed
+            if args.reform == "reform_delayed":
+                olg.rho[:,:,args.t_0:] = rho_reform_delayed[:,:,args.t_0:]
             
-            if kwargs["rho"] == "private":
-                olg.rho = rho_private
-                olg.sigma = sigma_private
+            if args.reform == "private":
+                olg.rho[:,:,args.t_0:] = rho_private[:,:,args.t_0:]
+                olg.tau_rho[args.t_0:] = tau_rho_private[args.t_0:]
+                olg.rho_lamp_sum_coef[args.t_0:] = rho_lamp_sum_coef_private[args.t_0:]
                 
-            for _ in range(niter_steady):
+            for _ in range(args.niter_steady):
                 olg.steady_state()
-            olg.create_guess(t_0=olg.T-150,steady_start = olg.T-50)
-        if "gov_retirement_strategy" in kwargs:
-            if kwargs["gov_retirement_strategy"] == "fixed_tau_rho":
-                olg.gov_retirement_strategy = "fixed_tau_rho"
-                   
-            if kwargs["gov_retirement_strategy"] == "fixed_sigma":
-                olg.gov_retirement_strategy = "fixed_sigma"
-            
-                
-            for _ in range(niter_steady):
-                olg.steady_state()
-            olg.create_guess(t_0=olg.T-150,steady_start = olg.T-50)
-else:
-    olg = OLG_model(**kwargs)
+            olg.create_guess(t_0=olg.T-50,steady_start = olg.T-25)
+elif args.action == 'o':
+    olg = OLG_model(T=args.T)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
 
-        for _ in range(niter_steady):
+        for _ in range(args.niter_steady):
 
             olg.steady_state()
     with open(file_name, 'wb') as f:
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
     olg.update_a_initial()
-    olg.create_guess(t_0=1,steady_start = 100)
+    olg.create_guess(t_0=0,steady_start = 100)
+else:
+    print('unsupported action')
 
-# это удалить ---
-# for _ in range(niter_steady):
-#     olg.steady_state()
-# olg.create_guess(t_0=30,steady_start = 200)
-# for i in range(max_time):
-#     olg.update_government(i,1)
-# with open(file_name, 'wb') as f:
-#     pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
-# ---
     
-aggregate = Aggregate_plot(olg, t_0 = 0, t_1=olg.T)
-household = Household_plot(olg, g_0=30, g_1=250)
-government = Gov_plot(olg, t_0 = 0, t_1 = olg.T)
+aggregate = Aggregate_plot(olg, t_0 = 0, t_1=olg.T, name = args.output_name)
+household = Household_plot(olg, g_0=30, g_1=150, name = args.output_name)
+government = Gov_plot(olg, t_0 = 0, t_1 = olg.T, name = args.output_name)
 
 aggregate.create(alpha=.5, linestyle='dashed')
 household.create(alpha=.5, linestyle='dashed')
 government.create(alpha=.5, linestyle='dashed')
 
-msg_aggregate, msg_household, msg_government = bot.send_plot(aggregate.fig), bot.send_plot(household.fig), bot.send_plot(government.fig)
+if args.verbose:
+    
+    msg_aggregate, msg_household, msg_government = bot.send_plot(aggregate.fig), bot.send_plot(household.fig), bot.send_plot(government.fig)
 
-bot.clean_tmp_dir()
 
-
-niter_transition=50
-for i in range(niter_transition):
-    for t in range(t_0,olg.T):
+for i in range(args.niter_transition):
+    for t in range(args.t_0,olg.T):
         olg.update_government(t, 1)
         
     government.update(alpha=.1, linestyle='solid')
-    bot.update_plot(msg_government, government.fig)
+    if args.verbose:
+        bot.update_plot(msg_government, government.fig)
+        bot.clean_tmp_dir()
     
-    for t in range(t_0, olg.T):
+    for t in range(args.t_0, olg.T):
         olg.update_household(t, t)
     household.update(alpha=.1, linestyle='solid')
-    bot.update_plot(msg_household, household.fig)  
+    if args.verbose:
+        bot.update_plot(msg_household, household.fig)  
+        bot.clean_tmp_dir()
     
     progress_bar.refresh(nolock=True)
     pb_iteration += pb_iteration
-    for t in reversed(range(t_0, olg.T)):
+    for t in range(args.t_0, olg.T):
         olg.update_guess(t)
         progress_bar.update(1)
     
     aggregate.update(alpha=.1, linestyle='solid')
-    bot.update_plot(msg_aggregate, aggregate.fig)
+    if args.verbose:
+        bot.update_plot(msg_aggregate, aggregate.fig)
+        bot.clean_tmp_dir()
     
     with open(file_name, 'wb') as f:
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
+
+if not args.verbose:
+    bot.send_plot(aggregate.fig), bot.send_plot(household.fig), bot.send_plot(government.fig)      
+    bot.clean_tmp_dir()
