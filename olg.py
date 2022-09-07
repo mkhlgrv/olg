@@ -26,17 +26,21 @@ plt.rc('legend', fontsize=12)
 
 
 class OLG_model:
-    def __init__(self, G=60,T=200,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E, tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.1,
+    def __init__(self, G=60,T=200,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E
+                 , tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.1,
                  gov_strategy="unbalanced",gov_retirement_strategy="unbalanced",
-                 tax_sensitivity = {"VA_squared":0., "VA":0., "I":0., "I_squared":0.},
+                 tax_sensitivity = {"tau_VA_lag":0.5, "VA":1.7, "I":0., "I_squared":0.},
                  target_debt_to_gdp = 0.1,
                  tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho
                  , beta=.955
-                 , phi=0.225
+                 , phi=1.5
+                 , upsilon = -3
+                 , iota = -1.5
                  ,theta =1., psi=24., omega=0.269, alpha=0.35
                  , rho_lamp_sum_coef = rho_lamp_sum_coef
                  , delta=0.09#0.0608
-                 , A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial, eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
+                 , A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial
+                 , eta =0.25,steady_max_iter=5000,max_iter=5000,steady_guess=steady_guess):
         """
         OLG model
         :param G: number of generations, default is 110
@@ -82,7 +86,7 @@ class OLG_model:
         # Taxation
         self.tau_I, self.tau_II, self.tau_pi, self.tau_VA,self.tau_Ins, self.tau_rho =  tau_I,tau_II, tau_pi,tau_VA,tau_Ins, tau_rho
         # Utility
-        self.beta, self.phi,self.theta = beta, phi,theta
+        self.beta, self.phi, self.upsilon, self.iota, self.theta = beta, phi,upsilon, iota, theta
         # Production
         self.psi, self.alpha, self.delta, self.A = psi, alpha, delta, A
 
@@ -325,7 +329,7 @@ class OLG_model:
                 else:
                     debt_deviation_sq = 0.
                 I = min(self.tau_I[0]+self.tax_sensitivity["I"]*debt_deviation + self.tax_sensitivity["I_squared"]*debt_deviation_sq, 0.8)
-                VA = min(self.tau_VA[0]+self.tax_sensitivity["VA"]*debt_deviation + self.tax_sensitivity["VA_squared"]*debt_deviation_sq, 0.8)
+                VA = min(self.tau_VA[0]+self.tax_sensitivity["VA"]*debt_deviation + self.tax_sensitivity["tau_VA_lag"]*self.tau_VA[t-1], 0.8)
                 return I, VA
             else:
                 return self.tau_I[t], self.tau_VA[t]
@@ -409,21 +413,35 @@ class OLG_model:
                                       (labor_income_vector(self, s, g, t_0, g+1)+\
                                        self.lamp_sum_tax[t_0:( g+1)]+
                                        self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
-                                       )))/\
-                   (1/(1-self.phi)*np.sum(
-                       np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
-                       (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
-                               np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
-                               self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
-                np.sign(self.epsilon[s,g,t_0:g+1])
-                   )+\
-        np.sum(
-                       np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
-                       (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
-                               np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
-                               self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
-                (1-np.sign(self.epsilon[s,g,t_0:g+1]))
-                   ))
+                                       )))/ \
+                       (np.sum(
+                           np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
+                           (
+                               (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]) +
+                               (1/self.phi * 1/ (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))**(1/(self.iota-1)) *
+                               (labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(self.iota-1))
+                           ) *
+                           (
+                                   np.array([cumulative_rate_of_return(self, t_0 + 1, end) for end in
+                                             range(t_0 + 1, g + 2)]) *
+                                   self.beta ** np.array([i - t_0 for i in range(t_0, g + 1)]) *
+                                   self.Pi[s, g, t_0:(g + 1)] / self.Pi[s, g, t_0] *
+                                   (1 + self.tau_VA[t_0]) * (self.price[t_0]) / (
+                                           (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])
+                                                                                ) *
+                                   (
+                                           (1 + self.phi * (1/self.phi * 1/ (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])*
+                                    labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(1-self.iota)) ) /
+                                   (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t_0]) * (
+                                   self.price[t_0]) *
+                                                    labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
+                                                self.iota / (1 - self.iota)))
+                                   )**(self.upsilon/self.iota - 1)
+
+                           )**(1/(1-self.upsilon))
+                       )
+                       )
+
         
         
 
@@ -439,13 +457,27 @@ class OLG_model:
                 consumption = self.c[s, g, t_0]*\
                           (cumulative_rate_of_return(self, t_0+1, t+1)*
                            self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
-                           self.price[t_0]/((1+self.tau_VA[t])*self.price[t])
-                           )
+                           self.price[t_0]/((1+self.tau_VA[t])*self.price[t]) *
+                               (
+                                       (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t]) * (
+                                       self.price[t]) *
+                                                        labor_income_vector(self, s, g, t, t + 1)) ** (
+                                                    self.iota / (1 - self.iota))) /
+                                       (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t_0]) * (
+                                           self.price[t_0]) *
+                                                        labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
+                                                self.iota / (1 - self.iota)))
+                               ) ** (self.upsilon / self.iota - 1)
+                           )**(1/(1-self.upsilon))
             if self.epsilon[s,g,t] == 0:
                 labor = 0
             else:
                 
-                labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
+                labor = 1- consumption * \
+                        (1 / self.phi * 1 / (1 + self.tau_VA[t]) * (
+                            self.price[t]) *
+                         labor_income_vector(self, s, g, t, t + 1)) ** (
+                                1 / (1 - self.iota))
 #             if t == 1:
 #                         assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+self.a_initial[s,g]*(1+self.r[t]*(1-self.tau_II[t]))
 #             else:
