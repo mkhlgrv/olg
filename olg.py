@@ -407,7 +407,15 @@ class OLG_model:
 
 
         def get_initial_consumption(self, s, g, t_0):
-
+        
+            print((1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))*
+                                     labor_income_vector(self, s, g, t_0, g+1)))
+            print((self.iota/(1-self.iota)))
+            print((1 + self.phi * (1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))*
+                                     labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(1-self.iota)) ))
+           
+           
+           
             return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
                                np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
                                       (labor_income_vector(self, s, g, t_0, g+1)+\
@@ -418,7 +426,7 @@ class OLG_model:
                            np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
                            (
                                (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]) +
-                               (1/self.phi * 1/ (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))**(1/(self.iota-1)) *
+                               (1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])))**(1/(self.iota-1)) *
                                (labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(self.iota-1))
                            ) *
                            (
@@ -430,10 +438,10 @@ class OLG_model:
                                            (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])
                                                                                 ) *
                                    (
-                                           (1 + self.phi * (1/self.phi * 1/ (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])*
+                                           (1 + self.phi * (1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))*
                                     labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(1-self.iota)) ) /
-                                   (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t_0]) * (
-                                   self.price[t_0]) *
+                                   (1 + self.phi * (1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
+                                   self.price[t_0])) *
                                                     labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
                                                 self.iota / (1 - self.iota)))
                                    )**(self.upsilon/self.iota - 1)
@@ -459,12 +467,12 @@ class OLG_model:
                            self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
                            self.price[t_0]/((1+self.tau_VA[t])*self.price[t]) *
                                (
-                                       (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t]) * (
-                                       self.price[t]) *
+                                       (1 + self.phi * (1 / self.phi * 1 / ((1 + self.tau_VA[t]) * (
+                                       self.price[t])) *
                                                         labor_income_vector(self, s, g, t, t + 1)) ** (
                                                     self.iota / (1 - self.iota))) /
-                                       (1 + self.phi * (1 / self.phi * 1 / (1 + self.tau_VA[t_0]) * (
-                                           self.price[t_0]) *
+                                       (1 + self.phi * (1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
+                                           self.price[t_0])) *
                                                         labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
                                                 self.iota / (1 - self.iota)))
                                ) ** (self.upsilon / self.iota - 1)
