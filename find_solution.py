@@ -49,6 +49,7 @@ if exists(input_filename) and args.action == 'c' :
             for _ in range(args.niter_steady):
                 olg.steady_state()
             olg.create_guess(t_0=olg.T-50,steady_start = olg.T-25)
+            
 elif args.action == 'o':
     olg = OLG_model(T=args.T)
     with warnings.catch_warnings():

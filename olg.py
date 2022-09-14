@@ -33,14 +33,15 @@ class OLG_model:
     def __init__(self, G=60,T=200,N=N,epsilon=epsilon, rho=rho, sigma=sigma,Pi=Pi,r=r,price_M=price_M, price_E=price_E
                  , tau_I=tau_I,tau_II=tau_II,tau_Ins=tau_Ins,acceptable_deficit_ratio=0.1,
                  gov_strategy="unbalanced",gov_retirement_strategy="unbalanced",
-                 tax_sensitivity = {"tau_VA_lag":0.5, "VA":1.7, "I":0., "I_squared":0.},
+                 tax_sensitivity = {"tau_VA_lag":0., "VA":1.8, "I":0., "I_squared":0.},
                  target_debt_to_gdp = 0.1,
                  tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho
-                 , beta=.955
-                 , phi=1.5
-                 , upsilon = -3
+                 , beta=0.955
+                 , phi=0.225
+                 , upsilon = -3.
                  , iota = -1.5
-                 ,theta =1., psi=24., omega=0.269, alpha=0.35
+                 , labor_elasticity = 1.
+                 , theta =1., psi=24., omega=0.269, alpha=0.35
                  , rho_lamp_sum_coef = rho_lamp_sum_coef
                  , delta=0.09#0.0608
                  , A=A,initial=initial,Oil=Oil, deficit_ratio_initial=deficit_ratio_initial
@@ -90,7 +91,7 @@ class OLG_model:
         # Taxation
         self.tau_I, self.tau_II, self.tau_pi, self.tau_VA,self.tau_Ins, self.tau_rho =  tau_I,tau_II, tau_pi,tau_VA,tau_Ins, tau_rho
         # Utility
-        self.beta, self.phi, self.upsilon, self.iota, self.theta = beta, phi,upsilon, iota, theta
+        self.beta, self.phi, self.upsilon, self.iota, self.theta, self.labor_elasticity = beta, phi,upsilon, iota, theta, labor_elasticity
         # Production
         self.psi, self.alpha, self.delta, self.A = psi, alpha, delta, A
 
@@ -413,41 +414,88 @@ class OLG_model:
 
         def get_initial_consumption(self, s, g, t_0):
 
+            if self.labor_elasticity == 0: # нулевая эластичность труда, выбирается только потребление
+                return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
+                    np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (labor_income_vector(self, s, g, t_0, g+1)*(1-self.phi)+\
+                    self.lamp_sum_tax[t_0:( g+1)]+
+                    self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
+                    )))/\
+                    (np.sum(
+                    np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
+                    np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
+                    self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                    np.sign(self.epsilon[s,g,t_0:g+1])
+                    )+\
+                    np.sum(
+                    np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
+                    np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
+                    self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                    (1-np.sign(self.epsilon[s,g,t_0:g+1]))
+                    ))
+            
+            
+            elif self.labor_elasticity == 1: # единичная эластичность, труд сильно реагирует на зп
+                return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
+                    np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (labor_income_vector(self, s, g, t_0, g+1)+\
+                    self.lamp_sum_tax[t_0:( g+1)]+
+                    self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
+                    )))/\
+                    (1/(1-self.phi)*np.sum(
+                    np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
+                    np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
+                    self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                    np.sign(self.epsilon[s,g,t_0:g+1])
+                    )+\
+                    np.sum(
+                    np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                    (1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)])*
+                    np.array([cumulative_rate_of_return(self,t_0+1, end) for end in range(t_0+1, g+2)])*
+                    self.beta**np.array([i-t_0 for i in range(t_0, g+1)])*self.Pi[s,g,t_0:(g+1)]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*(self.price[t_0])/((1+self.tau_VA[t_0:(g+1)])*(self.price[t_0:(g+1)]))*\
+                    (1-np.sign(self.epsilon[s,g,t_0:g+1]))
+                    ))
+            
+            
+            
+            elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция (пока плохо работает) 
+              
+                return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
+                                   np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
+                                          (labor_income_vector(self, s, g, t_0, g+1)+\
+                                           self.lamp_sum_tax[t_0:( g+1)]+
+                                           self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
+                                           )))/ \
+                           (np.sum(
+                               np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
+                               (
+                                   (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]) +
+                                   (1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])))**(1/(self.iota-1)) *
+                                   inf_to_zero((labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(self.iota-1)))
+                               ) *
+                               (
+                                       np.array([cumulative_rate_of_return(self, t_0 + 1, end) for end in
+                                                 range(t_0 + 1, g + 2)]) *
+                                       self.beta ** np.array([i - t_0 for i in range(t_0, g + 1)]) *
+                                       self.Pi[s, g, t_0:(g + 1)] / self.Pi[s, g, t_0] *
+                                       (1 + self.tau_VA[t_0]) * (self.price[t_0]) / (
+                                               (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])
+                                                                                    ) *
+                                       (
+                                               (1 + self.phi * inf_to_zero((1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))*
+                                        labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(self.iota-1))) ) /
+                                       (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
+                                       self.price[t_0])) *
+                                                        labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
+                                                    self.iota / (self.iota-1))))
+                                       )**(self.upsilon/self.iota - 1)
 
-           
-            return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
-                               np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
-                                      (labor_income_vector(self, s, g, t_0, g+1)+\
-                                       self.lamp_sum_tax[t_0:( g+1)]+
-                                       self.rho[s,g,t_0:(g+1)]*self.sigma[t_0:(g+1)]*self.w[t_0:(g+1)]
-                                       )))/ \
-                       (np.sum(
-                           np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
-                           (
-                               (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]) +
-                               (1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])))**(1/(self.iota-1)) *
-                               inf_to_zero((labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(self.iota-1)))
-                           ) *
-                           (
-                                   np.array([cumulative_rate_of_return(self, t_0 + 1, end) for end in
-                                             range(t_0 + 1, g + 2)]) *
-                                   self.beta ** np.array([i - t_0 for i in range(t_0, g + 1)]) *
-                                   self.Pi[s, g, t_0:(g + 1)] / self.Pi[s, g, t_0] *
-                                   (1 + self.tau_VA[t_0]) * (self.price[t_0]) / (
-                                           (1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)])
-                                                                                ) *
-                                   (
-                                           (1 + self.phi * inf_to_zero((1/self.phi * 1/ ((1 + self.tau_VA[t_0:(g + 1)]) * (self.price[t_0:(g + 1)]))*
-                                    labor_income_vector(self, s, g, t_0, g+1))**(self.iota/(1-self.iota))) ) /
-                                   (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
-                                   self.price[t_0])) *
-                                                    labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
-                                                self.iota / (1 - self.iota))))
-                                   )**(self.upsilon/self.iota - 1)
-
-                           )**(1/(1-self.upsilon))
-                       )
-                       )
+                               )**(1/(1-self.upsilon))
+                           )
+                           )
 
         
         
@@ -460,34 +508,50 @@ class OLG_model:
                 consumption = get_initial_consumption(self, s, g, t)
             else:
                 t_0 = max(g-self.G+1,t_0)
+                if (self.labor_elasticity == 0) or (self.labor_elasticity == 1): # нулевая эластичность труда, выбирается только потребление
+                # или единичная эластичность, труд сильно реагирует на зп
                 
-                consumption = self.c[s, g, t_0]*\
-                          (cumulative_rate_of_return(self, t_0+1, t+1)*
-                           self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
-                           self.price[t_0]/((1+self.tau_VA[t])*self.price[t]) *
-                               (
-                                       (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t]) * (
-                                       self.price[t])) *
-                                                        labor_income_vector(self, s, g, t, t + 1)) ** (
-                                                    self.iota / (1 - self.iota)))) /
-                                       (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
-                                           self.price[t_0])) *
-                                                        labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
-                                                self.iota / (1 - self.iota))))
-                               ) ** (self.upsilon / self.iota - 1)
-                           )**(1/(1-self.upsilon))
+                    consumption = self.c[s, g, t_0]*\
+                              (cumulative_rate_of_return(self, t_0+1, t+1)*
+                               self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
+                               self.price[t_0]/((1+self.tau_VA[t])*self.price[t])
+                               )
+                
+                elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция (пока плохо работает)
+                    consumption = self.c[s, g, t_0]*\
+                              (cumulative_rate_of_return(self, t_0+1, t+1)*
+                               self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
+                               self.price[t_0]/((1+self.tau_VA[t])*self.price[t]) *
+                                   (
+                                           (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t]) * (
+                                           self.price[t])) *
+                                                            labor_income_vector(self, s, g, t, t + 1)) ** (
+                                                        self.iota / (self.iota-1)))) /
+                                           (1 + self.phi * inf_to_zero((1 / self.phi * 1 / ((1 + self.tau_VA[t_0]) * (
+                                               self.price[t_0])) *
+                                                            labor_income_vector(self, s, g, t_0, t_0 + 1)) ** (
+                                                    self.iota / (self.iota-1))))
+                                   ) ** (self.upsilon / self.iota - 1)
+                               )**(1/(1-self.upsilon))
             if self.epsilon[s,g,t] == 0:
                 labor = 0
             else:
+                if self.labor_elasticity == 0: # нулевая эластичность труда, выбирается только потребление, труд всегда фикс
+                    labor = 1-self.phi
+                    
+                elif self.labor_elasticity == 1: # единичная эластичность, труд сильно реагирует на зп
                 
-                labor = 1- consumption * \
-                        inf_to_zero((1 / self.phi * 1 / (1 + self.tau_VA[t]) * (
-                            self.price[t]) *
-                         labor_income_vector(self, s, g, t, t + 1)) ** (
-                                1 / (1 - self.iota)))
-#             if t == 1:
-#                         assets = labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+self.a_initial[s,g]*(1+self.r[t]*(1-self.tau_II[t]))
-#             else:
+                    labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
+                    
+                    
+                    
+                elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция upsilon, iota (пока плохо работает)
+                    labor = 1.- consumption * \
+                            inf_to_zero((1 / (self.phi * (1 + self.tau_VA[t]) * (
+                                self.price[t])) *
+                             labor_income_vector(self, s, g, t, t + 1)) ** (
+                                    1 / (self.iota-1)))
+
             assets = self.lamp_sum_tax[t]+labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+(self.a[s,g, t-1]+bequest)*(1+self.r[t]*(1-self.tau_I[t]))
             return consumption, labor, assets
         else:
@@ -531,9 +595,12 @@ class OLG_model:
         Labor = np.sum([self.l[s,g,self.T]*self.N[s,g,self.T]*self.epsilon[s,g,self.T] for g in range(self.T, self.G+self.T) for s in range(2)])
 
         Assets =  np.sum([self.a[s,g,self.T]*self.N[s,g,self.T] for g in range(self.T, self.G+self.T) for s in range(2)])
-
+#         print(Consumption,  Labor, Assets)
         if len(self.steady_path)==0:
-            self.steady[-3:] = np.array([Consumption,  Labor, Assets])
+            # NOTE
+            
+#             self.steady[-3:] = np.array([Consumption,  Labor, Assets])
+            self.steady[-3:] = self.eta*np.array([Consumption,  Labor, Assets]) + (1-self.eta)*self.steady[-3:]
             gov = 0.05
         else:
             self.steady[-3:] = self.eta*np.array([Consumption,  Labor, Assets]) + (1-self.eta)*self.steady[-3:]
@@ -588,7 +655,7 @@ class OLG_model:
         
         if result["success"] or result["status"]==1:
             self.steady[:6] = self.eta*result["x"] + (1-self.eta)*z_guess
-            self.steady_max_iter = 1000
+            self.steady_max_iter = 10000
             eq_res = equilibrium(self.steady[:6], self, False)
         else:
             if result["status"]==-1:
@@ -744,7 +811,6 @@ class OLG_model:
         coef = np.sum(self.a[:,self.G+self.T-2:self.T-1:-1,self.T]*\
                       self.N[:,self.G+0-2::-1,0])/self.Assets[0]
         
-#         self.a_initial[:,self.G-2::-1]=self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
         self.a[:,self.G-2::-1,0] = self.a[:,self.G+self.T-2:self.T-1:-1,self.T]/coef
         
 

@@ -38,7 +38,7 @@ A = np.array([A_N, A_E])
 
 K_initial = 207.875
 Y_initial = K_initial**0.35 * 72.508**0.65
-Rho_lamp_sum_initial = 3.
+Rho_lamp_sum_initial = 3. # выбираются так, чтобы дефицит ПФ составлял 3.1% В
 Oil_initial = 0.083*Y_initial
 oil_price = np.array([0.99**i for i in range(16)]+[0.99**16 for _ in range(max_time-16)])
 GDP_initial = Y_initial+Oil_initial
@@ -60,6 +60,10 @@ initial = {"lamp_sum_tax":0.17 # калибруем так, чтобы улов�
                  "I_E":I_initial*(0.198),
                  "Rho_lamp_sum":Rho_lamp_sum_initial}
            
-steady_guess = np.array([2.3167618 ,   0.72691265,   0.87036366,  11.62847021,
-         1.        ,   1.        , 447.5913557 ,  48.56260336,
-       510.48451492])
+steady_guess = np.array([2.28699006e+00, 9.74048999e-01, 6.09327218e-02, 1.04489377e+01,
+       1.00000000e+00, 1.00000000e+00, 6.74383209e+02, 4.83939191e+01,
+       6.17294122e+03])
+# steady_guess = np.array([ 1.57841123e+00,  6.55377948e-01,  7.87994284e-01,  1.03943485e+01,
+#         1.00000000e+00,  1.00000000e+00,  6.25792410e+02,  6.68536161e+01,
+#        -6.55468099e+02])
+#  k_N, l_N, k_E, w, price, price_N, Consumption,  Labor, Assets
