@@ -40,7 +40,7 @@ class OLG_model:
                  , phi=0.225
                  , upsilon = -3.
                  , iota = -1.5
-                 , labor_elasticity = 1.
+                 , utility = "hybrid"
                  , theta =1., psi=24., omega=0.269, alpha=0.35
                  , rho_lamp_sum_coef = rho_lamp_sum_coef
                  , delta=0.09#0.0608
@@ -91,7 +91,7 @@ class OLG_model:
         # Taxation
         self.tau_I, self.tau_II, self.tau_pi, self.tau_VA,self.tau_Ins, self.tau_rho =  tau_I,tau_II, tau_pi,tau_VA,tau_Ins, tau_rho
         # Utility
-        self.beta, self.phi, self.upsilon, self.iota, self.theta, self.labor_elasticity = beta, phi,upsilon, iota, theta, labor_elasticity
+        self.beta, self.phi, self.upsilon, self.iota, self.theta, self.utility = beta, phi,upsilon, iota, theta, utility
         # Production
         self.psi, self.alpha, self.delta, self.A = psi, alpha, delta, A
 
@@ -414,7 +414,7 @@ class OLG_model:
 
         def get_initial_consumption(self, s, g, t_0):
 
-            if self.labor_elasticity == 0: # нулевая эластичность труда, выбирается только потребление
+            if self.utility == "exogenous_labor": # нулевая эластичность труда, выбирается только потребление
                 return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
                     np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
                     (labor_income_vector(self, s, g, t_0, g+1)*(1-self.phi)+\
@@ -437,7 +437,7 @@ class OLG_model:
                     ))
             
             
-            elif self.labor_elasticity == 1: # единичная эластичность, труд сильно реагирует на зп
+            elif self.utility == "cobb_douglas": # единичная эластичность, труд сильно реагирует на зп
                 return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
                     np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
                     (labor_income_vector(self, s, g, t_0, g+1)+\
@@ -461,7 +461,7 @@ class OLG_model:
             
             
             
-            elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция (пока плохо работает) 
+            elif self.utility == "ces": # между 0 и 1, CES-функция (пока плохо работает)
               
                 return (self.a[s,g,t_0-1]* cumulative_rate_of_return(self, t_0, g+1)+
                                    np.sum(np.array([cumulative_rate_of_return(self,start, g+1) for start in range(t_0+1, g+2)])*
@@ -496,9 +496,35 @@ class OLG_model:
                                )**(1/(1-self.upsilon))
                            )
                            )
+            elif self.utility == "hybrid": # гибридная функция с эластичностью < 1
+                def life_time_budget_constraint_equation(x):
+                    return - (self.a[s, g, t_0 - 1] * cumulative_rate_of_return(self, t_0, g + 1) +
+                         np.sum(
+                             np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
+                             (self.lamp_sum_tax[t_0:(g + 1)] +
+                              self.rho[s, g, t_0:(g + 1)] * self.sigma[t_0:(g + 1)] * self.w[t_0:(g + 1)]
+                              ))) +\
+                        np.sum(
+                            np.array([cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
+                            np.array([cumulative_rate_of_return(self, t_0 + 1, end) for end in range(t_0 + 1, g + 2)]) *
+                            self.beta ** np.array([i - t_0 for i in range(t_0, g + 1)]) * self.Pi[s, g, t_0:(g + 1)] /
+                            self.Pi[s, g, t_0] * (1 + self.tau_VA[t_0]) * (self.price[t_0])
+                        )*  x- \
+                           np.sum(
+                               np.array(
+                                   [cumulative_rate_of_return(self, start, g + 1) for start in range(t_0 + 1, g + 2)]) *
+                               labor_income_vector(self, s, g, t_0, g + 1)**((self.upsilon+1)/self.upsilon)*
+                               (
+                                       self.iota * self.phi * np.array([cumulative_rate_of_return(self, t_0 + 1, end) for end in
+                                                 range(t_0 + 1, g + 2)]) *
+                                       self.beta ** np.array([i - t_0 for i in range(t_0, g + 1)]) * self.Pi[s, g,
+                                                                                                     t_0:(g + 1)] /
+                                       self.Pi[s, g, t_0] * (1 + self.tau_VA[t_0]) * (self.price[t_0])
 
-        
-        
+                               )**(-1/self.upsilon)
+                           ) * x**(-1/self.upsilon)
+                return fsolve(life_time_budget_constraint_equation, 0.5)
+
 
         bequest = 0
         if t_0 is None:
@@ -508,7 +534,7 @@ class OLG_model:
                 consumption = get_initial_consumption(self, s, g, t)
             else:
                 t_0 = max(g-self.G+1,t_0)
-                if (self.labor_elasticity == 0) or (self.labor_elasticity == 1): # нулевая эластичность труда, выбирается только потребление
+                if (self.utility == "exogenous_labor") or (self.utility == "cobb_douglas") or (self.utility == "hybrid"): # нулевая эластичность труда, выбирается только потребление
                 # или единичная эластичность, труд сильно реагирует на зп
                 
                     consumption = self.c[s, g, t_0]*\
@@ -517,7 +543,7 @@ class OLG_model:
                                self.price[t_0]/((1+self.tau_VA[t])*self.price[t])
                                )
                 
-                elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция (пока плохо работает)
+                elif self.utility == "ces": # между 0 и 1, CES-функция (пока плохо работает)
                     consumption = self.c[s, g, t_0]*\
                               (cumulative_rate_of_return(self, t_0+1, t+1)*
                                self.beta**(t-t_0)*self.Pi[s,g,t]/self.Pi[s,g,t_0] * (1+self.tau_VA[t_0])*\
@@ -536,21 +562,24 @@ class OLG_model:
             if self.epsilon[s,g,t] == 0:
                 labor = 0
             else:
-                if self.labor_elasticity == 0: # нулевая эластичность труда, выбирается только потребление, труд всегда фикс
+                if self.utility == "exogenous_labor": # нулевая эластичность труда, выбирается только потребление, труд всегда фикс
                     labor = 1-self.phi
                     
-                elif self.labor_elasticity == 1: # единичная эластичность, труд сильно реагирует на зп
+                elif self.utility == "cobb_douglas": # единичная эластичность, труд сильно реагирует на зп
                 
                     labor = 1- consumption/((1-self.phi)/(self.phi)*(1/((1+self.tau_VA[t])*self.price[t]))*labor_income_vector(self, s, g, t, t+1)[0])
                     
                     
                     
-                elif self.labor_elasticity == 0.5: # между 0 и 1, CES-функция upsilon, iota (пока плохо работает)
+                elif self.utility == "ces": # между 0 и 1, CES-функция upsilon, iota (пока плохо работает)
                     labor = 1.- consumption * \
                             inf_to_zero((1 / (self.phi * (1 + self.tau_VA[t]) * (
                                 self.price[t])) *
                              labor_income_vector(self, s, g, t, t + 1)) ** (
                                     1 / (self.iota-1)))
+
+                elif self.utility == "hybrid": # гибридная функция
+                    pass
 
             assets = self.lamp_sum_tax[t]+labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+(self.a[s,g, t-1]+bequest)*(1+self.r[t]*(1-self.tau_I[t]))
             return consumption, labor, assets
