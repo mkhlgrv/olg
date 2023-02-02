@@ -37,9 +37,9 @@ class OLG_model:
                  target_debt_to_gdp = 0.1,
                  tau_pi=tau_pi, tau_VA=tau_VA, tau_rho=tau_rho
                  , beta=0.955
-                 , phi=0.225
-                 , upsilon = -3.
-                 , iota = -1.5
+                 , phi=1.
+                 , upsilon = 5.
+                 , iota = 7.5
                  , utility = "hybrid"
                  , theta =1., psi=24., omega=0.269, alpha=0.35
                  , rho_lamp_sum_coef = rho_lamp_sum_coef
@@ -579,7 +579,7 @@ class OLG_model:
                                     1 / (self.iota-1)))
 
                 elif self.utility == "hybrid": # гибридная функция
-                    pass
+                    labor = (labor_income_vector(self, s, g, t, t + 1) / (consumption * self.phi * self.iota * (1+self.tau_VA[t])*self.price[t]))**(1/self.upsilon)
 
             assets = self.lamp_sum_tax[t]+labor_income_vector(self, s, g, t, t+1)[0]*labor+self.rho[s,g,t]*self.sigma[t]*self.w[t] - consumption*(1+self.tau_VA[t])*self.price[t]+(self.a[s,g, t-1]+bequest)*(1+self.r[t]*(1-self.tau_I[t]))
             return consumption, labor, assets
