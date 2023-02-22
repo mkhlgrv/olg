@@ -44,3 +44,23 @@ plots/.*jpeg
 
 # Refernces
 ref/.*pdf
+*.pdf
+
+# Output
+*.ods
+*.xlsx
+*.ppt
+*.docx
+*.xls
+*.pckl
+*.file
+
+# .Env
+.env
+
+# Ipynb
+*ipynb_checkpoints*
+*__pycache__*
+
+*award/*
+*copies/*
