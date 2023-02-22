@@ -1,64 +1,102 @@
 import numpy as np
-demography = np.load('demography.npy',allow_pickle='TRUE').item()
-n_generations = 60
 
 
-max_time = demography["N"][0].shape[1]
-# sigma = np.array([0.356 for _ in range(max_time)])
-sigma = np.array([0.3 for _ in range(max_time)])
-r = np.array([0.06 for _ in range(max_time)])
-price_M = np.array([1. for _ in range(max_time)])
-price_E = np.array([1. for _ in range(max_time)])
-tau_I = np.array([0.13 for _ in range(max_time)])
-tau_II = np.array([0. for _ in range(max_time)])
-tau_Ins = np.array([0.08 for _ in range(max_time)])
-tau_pi = np.array([0.2 for _ in range(max_time)])
-tau_VA = np.array([0.18 for _ in range(max_time)])
-tau_rho = np.array([0.22 for _ in range(max_time)])
-A_N = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(max_time-100)]))))
-A_E = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(max_time-100)]))))
 
-N = demography["N"]
-Pi = demography["Pi"]
-epsilon = demography["epsilon"]
-rho = demography["rho"]
-rho_reform = demography["rho_reform"]
-rho_reform_delayed = demography["rho_reform_delayed"]
-rho_private = demography["rho_private"]
-tau_rho_private = np.array([0.22 for _ in range(max_time)])
-tau_rho_private[15:65] = np.linspace(tau_rho_private[15],0, 50, endpoint=False)
-tau_rho_private[65:] = 0
-rho_lamp_sum_coef = np.array([1. for _ in range(max_time)])
 
-rho_lamp_sum_coef_private = np.array([1. for _ in range(max_time)])
-rho_lamp_sum_coef_private[15:65] = np.linspace(1.,0, 50, endpoint=False)
-rho_lamp_sum_coef_private[65:] = 0
+# Globals
+G_TOTAL = int(os.getenv('G_TOTAL'))
+G_MODEL = int(os.getenv('G_MODEL'))
+MAX_TIME = int(os.getenv('MAX_TIME'))
+STEADY_TIME = int(os.getenv('STEADY_TIME'))
 
+# Precomputed blocks
+demography = np.load(os.path.join('assets', f'demography_{demo_scenario}.pickle'),allow_pickle='TRUE').item()
+
+oil = np.load(os.path.join('assets', f'oil_{oil_scenario}.pickle'),allow_pickle='TRUE').item()
+
+# Households
+phi = np.array([1, 1.28])
+upsilon = 5.
+beta = 0.96
+iota = np.array([0.8, 0.8])
+N, Pi, epsilon, rho, rho_reform = demography['population'], demography['survival_probability'], demography['epsilon'], demography['rho'], demography['rho_reform']
+
+# World
+r = np.repeat(0.04, MAX_TIME)
+price_M = np.repeat(1., MAX_TIME)
+price_E = np.repeat(1., MAX_TIME)
+
+# Oil 
+Y_O , price_O, psi_O= oil['Y_O'], oil['price_O'], oil['psi_O']
+
+# Production
+A_N = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(MAX_TIME-100)]))))
+A_E = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(MAX_TIME-100)]))))
 A = np.array([A_N, A_E])
 
-K_initial = 207.875
-Y_initial = K_initial**0.35 * 72.508**0.65
-Rho_lamp_sum_initial = 3. # выбираются так, чтобы дефицит ПФ составлял 3.1% В
-Oil_initial = 0.083*Y_initial
-oil_price = np.array([0.99**i for i in range(16)]+[0.99**16 for _ in range(max_time-16)])
-GDP_initial = Y_initial+Oil_initial
-Gov_initial = (0.18*GDP_initial+Rho_lamp_sum_initial)# 21.#12.184183598971048#+Rho_lamp_init # скорее 21 должно быть
-Debt_initial = 0.10051*GDP_initial
-I_initial = 0.215*GDP_initial
-Oil = np.array([Oil_initial*(1-0.012)**(i) for i in range(max_time)])*oil_price
-deficit_ratio_initial = 0.01069
+omega = 0.289
+alpha = 0.35
+psi = 1.5
+delta = 0.1
+GDP_initial = 103861.7
+K_initial = (GDP_initial - Y_O[0])*alpha / (r[0] + delta) # 205903
+K_E_initial = K_initial*0.168 # 34592 
+K_N_initial = K_initial*(1-0.168) # 171312
 
-initial = {"lamp_sum_tax":0.17 # калибруем так, чтобы уловить дефицит в 2014
-                ,"price_N":1.,
-                 "K_N":K_initial*(1-0.198),
-                 "L_N":72.508*(1-0.198),
-                 "I_N":I_initial*(1-0.198),
-                 "K_E":K_initial*(0.198),
-                 "L_E":72.508*(0.198),
-                 "Debt":Debt_initial,
-                 "Gov":Gov_initial, 
-                 "I_E":I_initial*(0.198),
-                 "Rho_lamp_sum":Rho_lamp_sum_initial}
+I_initial = 22764.5
+I_N_initial = I_initial * (1-0.168)
+I_E_initial = I_initial * 0.168
+
+# Population scaling
+L_initial = 1/(K**0.35/ Y_non_oil)**(1/0.65)
+L_unscaled = sum((phi[s] * N[s, :, 0] * epsilon[s, :, 0]).sum() for s in range(2))
+N = N * (L_initial / L_unscaled)
+L_N_initial = L_initial * (1-0.168)
+L_E_initial = L_initial * (0.168)
+
+
+
+
+
+# Taxes
+tau_I = np.repeat(0.13, MAX_TIME)
+tau_II = np.repeat(0., MAX_TIME)
+tau_Ins = np.repeat(0.08, MAX_TIME)
+tau_pi = np.repeat(0.2, MAX_TIME)
+tau_VA = np.repeat(0.2, MAX_TIME)
+tau_rho = np.repeat(0.22, MAX_TIME)
+tau_O = np.repeat(0.78, MAX_TIME)
+tax_LS = np.repeat(0., MAX_TIME)*A_N
+
+
+
+
+# Government
+sigma = np.array([np.repeat(0.293, MAX_TIME), np.repeat(0.33, MAX_TIME)])
+Gov_initial = 18394.
+Debt_initial = -20707.7
+target_debt_to_gdp = 0.3
+tax_sensitivity = {"VA_lag":0., "VA":1.8, "I":0., "I_squared":0.}
+Deficit_initial = 3035.6
+
+
+# Computation
+eta =0.25
+steady_max_iter=5000
+max_iter=500
+initial = {"price_N":1.,
+         "K_N":K_N_initial,
+         "L_N":L_N_initial,
+         "I_N":I_N_initial,
+         "K_E":K_E_initial,
+         "L_E":L_E_initial,
+         "I_E":I_E_initial,
+         "Debt":Debt_initial,
+         "Gov":Gov_initial, 
+         "Deficit":Deficit_initial,
+           "lmbda_E":0.5,
+           "lmbda_N":0.5
+}
            
 steady_guess = np.array([2.28699006e+00, 9.74048999e-01, 6.09327218e-02, 1.04489377e+01,
        1.00000000e+00, 1.00000000e+00, 6.74383209e+02, 4.83939191e+01,
