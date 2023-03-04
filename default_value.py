@@ -1,5 +1,5 @@
 import numpy as np
-
+import os
 
 
 
@@ -9,15 +9,19 @@ G_MODEL = int(os.getenv('G_MODEL'))
 MAX_TIME = int(os.getenv('MAX_TIME'))
 STEADY_TIME = int(os.getenv('STEADY_TIME'))
 
-# Precomputed blocks
-demography = np.load(os.path.join('assets', f'demography_{demo_scenario}.pickle'),allow_pickle='TRUE').item()
 
-oil = np.load(os.path.join('assets', f'oil_{oil_scenario}.pickle'),allow_pickle='TRUE').item()
+demo_scenario = os.getenv('demo_scenario', 'medium')
+oil_scenario = os.getenv('oil_scenario', 'mid')
+
+# Precomputed blocks
+demography = np.load(os.path.join('assets', f'demography_{demo_scenario}.pickle'),allow_pickle='TRUE')
+
+oil = np.load(os.path.join('assets', f'oil_{oil_scenario}.pickle'),allow_pickle='TRUE')
 
 # Households
 phi = np.array([1, 1.28])
 upsilon = 5.
-beta = 0.96
+beta = 0.975
 iota = np.array([0.8, 0.8])
 N, Pi, epsilon, rho, rho_reform = demography['population'], demography['survival_probability'], demography['epsilon'], demography['rho'], demography['rho_reform']
 
@@ -48,9 +52,11 @@ I_N_initial = I_initial * (1-0.168)
 I_E_initial = I_initial * 0.168
 
 # Population scaling
-L_initial = 1/(K**0.35/ Y_non_oil)**(1/0.65)
+L_initial = 1/(K_initial**0.35/ (GDP_initial - Y_O[0]))**(1/0.65)
 L_unscaled = sum((phi[s] * N[s, :, 0] * epsilon[s, :, 0]).sum() for s in range(2))
+
 N = N * (L_initial / L_unscaled)
+
 L_N_initial = L_initial * (1-0.168)
 L_E_initial = L_initial * (0.168)
 
@@ -66,7 +72,7 @@ tau_pi = np.repeat(0.2, MAX_TIME)
 tau_VA = np.repeat(0.2, MAX_TIME)
 tau_rho = np.repeat(0.22, MAX_TIME)
 tau_O = np.repeat(0.78, MAX_TIME)
-tax_LS = np.repeat(0., MAX_TIME)*A_N
+tax_LS = np.repeat(0.205, MAX_TIME)*A_N
 
 
 
@@ -74,14 +80,14 @@ tax_LS = np.repeat(0., MAX_TIME)*A_N
 # Government
 sigma = np.array([np.repeat(0.293, MAX_TIME), np.repeat(0.33, MAX_TIME)])
 Gov_initial = 18394.
-Debt_initial = -20707.7
+Debt_initial = 9410
 target_debt_to_gdp = 0.3
-tax_sensitivity = {"VA_lag":0., "VA":1.8, "I":0., "I_squared":0.}
+tax_sensitivity = {'VA_lag': 0.5, 'VA': 1., 'I': 0.0, 'I_lag': 0.0}
 Deficit_initial = 3035.6
 
 
 # Computation
-eta =0.25
+eta =0.5
 steady_max_iter=5000
 max_iter=500
 initial = {"price_N":1.,

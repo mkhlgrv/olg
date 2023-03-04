@@ -129,7 +129,7 @@ class Gov_plot(Guess_plot):
                 for l, s, c in zip(labels_col, series_col, color_col):
                     ax_col.plot(s, color = c, **plt_kwargs,label = l)
                 ax_col.legend()
-        self.ax[0,0].set_ylim([0.08, 0.35])    
+        self.ax[0,0].set_ylim([0., 1.])    
                 
     def update(self,alpha=1, linestyle='solid', color="black"):
         plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
