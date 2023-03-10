@@ -31,7 +31,7 @@ price_M = np.repeat(1., MAX_TIME)
 price_E = np.repeat(1., MAX_TIME)
 
 # Oil 
-Y_O , price_O, psi_O= oil['Y_O'], oil['price_O'], oil['psi_O']
+Y_O , price_O, psi_O= oil['Y_O'], oil['price_O'], np.array(oil['psi_O'])
 
 # Production
 A_N = np.cumprod(np.concatenate(([1.],np.linspace(1.02,1.01,99), np.array([1.01 for _ in range(MAX_TIME-100)]))))
@@ -50,6 +50,7 @@ K_N_initial = K_initial*(1-0.168) # 171312
 I_initial = 22764.5
 I_N_initial = I_initial * (1-0.168)
 I_E_initial = I_initial * 0.168
+C_initial=52311
 
 # Population scaling
 L_initial = 1/(K_initial**0.35/ (GDP_initial - Y_O[0]))**(1/0.65)
@@ -77,17 +78,18 @@ tax_LS = np.repeat(0.205, MAX_TIME)*A_N
 
 
 
+
 # Government
 sigma = np.array([np.repeat(0.293, MAX_TIME), np.repeat(0.33, MAX_TIME)])
 Gov_initial = 18394.
 Debt_initial = 9410
-target_debt_to_gdp = 0.3
-tax_sensitivity = {'VA_lag': 0.5, 'VA': 1., 'I': 0.0, 'I_lag': 0.0}
+target_debt_to_gdp = 0.2
+tax_sensitivity = {'VA_lag': 0.7, 'VA': 2.6, 'I': 0.0, 'I_lag': 0.0}
 Deficit_initial = 3035.6
 
 
 # Computation
-eta =0.5
+eta =0.25
 steady_max_iter=5000
 max_iter=500
 initial = {"price_N":1.,
@@ -97,6 +99,7 @@ initial = {"price_N":1.,
          "K_E":K_E_initial,
          "L_E":L_E_initial,
          "I_E":I_E_initial,
+         "C":C_initial,
          "Debt":Debt_initial,
          "Gov":Gov_initial, 
          "Deficit":Deficit_initial,
@@ -104,9 +107,9 @@ initial = {"price_N":1.,
            "lmbda_N":0.5
 }
            
-steady_guess = np.array([  1.84566091,   0.78608486,   0.5022547 ,  10.44892759,
-         1.        ,   1.        , 501.77404641,  49.67774419,
-        32.72176708])
+steady_guess = np.array([2.65280161e+00, 7.20838767e-01, 1.02735785e+00, 3.30768049e+01,
+       1.00000000e+00, 1.00000000e+00, 4.67438156e-01, 3.66973833e+05,
+       1.64488185e+04, 2.78606328e+05])
 # занятость 65.7%
 # steady_guess = np.array([ 1.57841123e+00,  6.55377948e-01,  7.87994284e-01,  1.03943485e+01,
 #         1.00000000e+00,  1.00000000e+00,  6.25792410e+02,  6.68536161e+01,

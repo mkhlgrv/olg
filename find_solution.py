@@ -27,7 +27,6 @@ parser.add_argument('-os','--oil_scenario',  type=str, help = "high, low, mid, p
 
 args = parser.parse_args()
 args.verbose = bool(args.verbose)
-print(args.verbose)
 
 os.environ["demo_scenario"] = args.demo_scenario
 os.environ["oil_scenario"] = args.oil_scenario
@@ -42,6 +41,7 @@ progress_bar = tqdm(desc = f'{args.output_name} {pb_iteration}',
                       total=None,
                           token=os.getenv('comp_bot_token'),
                           chat_id=os.getenv('chat_id')) 
+
 if exists(input_filename) and args.action == 'c' :
     
     with open(input_filename, 'rb') as f:
@@ -78,59 +78,34 @@ elif args.action == 'o':
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
         
     olg.update_a_initial()
-    olg.create_guess(t_0=0,steady_start = olg.T-25)
+    olg.create_guess(t_0=1,steady_start = olg.T-50)
 else:
     print('unsupported action')
+olg.eta = 0.3
+olg.guess = {}
 
-    
 aggregate = Aggregate_plot(olg, t_0 = 0, t_1=olg.T, name = args.output_name)
 household = Household_plot(olg, g_0=30, g_1=150, name = args.output_name)
 government = Gov_plot(olg, t_0 = 0, t_1 = olg.T, name = args.output_name)
+error = Error_plot(olg, t_0 = 0, t_1 = olg.T, name = args.output_name)
 
 aggregate.create(alpha=.5, linestyle='dashed')
 household.create(alpha=.5, linestyle='dashed')
 government.create(alpha=.5, linestyle='dashed')
+error.create(alpha=.1, linestyle='dashed')
 
 if args.verbose:
     
-    msg_aggregate, msg_household, msg_government = send_figure(aggregate), send_figure(household),send_figure(government)
+    msg_aggregate, msg_household, msg_government, msg_error = send_figure(aggregate), send_figure(household),send_figure(government),send_figure(error)
     
-for _ in range(20):
-    
-    for t in range(args.t_0,olg.T):
-        olg.update_government(t, 1)
-    olg.tau_VA[olg.T:] = olg.tau_VA[olg.T-1] 
 
-    if args.verbose:
-        government.update(alpha=.1, linestyle='solid')
-        send_figure(government, msg_government)
-    
-    for t in range(args.t_0, olg.T):
-            olg.update_household(t, t)
-    if args.verbose:
-        household.update(alpha=.1, linestyle='solid')
-        send_figure(household, msg_household)
-    for _ in range(args.niter_steady):
-        olg.update_steady_state()
-    olg.update_a_initial()
-    olg.create_guess(t_0=0,steady_start = olg.T-25)
-    if args.verbose:
-        aggregate.update(alpha=.1, linestyle='solid')
-        send_figure(aggregate, msg_aggregate)
-    
 
 
 for i in range(args.niter_transition):
-    for t in range(args.t_0,olg.T-25):
-         olg.update_government(t, 1)
-    olg.tau_VA[(olg.T-25):] = olg.tau_VA[olg.T-26] 
 
-    government.update(alpha=.1, linestyle='solid')
-    if args.verbose:
-        send_figure(government, msg_government)
 
-    for t in range(args.t_0, olg.T-25):
-         olg.update_household(t, t)
+    for t in range(args.t_0, olg.T):
+         olg.update_household(t, t, smooth = True)
 
     household.update(alpha=.1, linestyle='solid')
     if args.verbose:
@@ -138,20 +113,30 @@ for i in range(args.niter_transition):
 
     progress_bar.refresh(nolock=True)
     pb_iteration += pb_iteration
-    for t in range(args.t_0, olg.T-25):
-        olg.update_guess(t)
+    for t in range(args.t_0, olg.T):
+        olg.evaluate_guess(t)
         progress_bar.update(1)
-    olg.update_capital_guess(args.t_0, olg.T-25)
+    
+    olg.update_guess(args.t_0, olg.T)
+    
     aggregate.update(alpha=.1, linestyle='solid')
     if args.verbose:
         send_figure(aggregate, msg_aggregate)
+    olg.update_error()
+    error.update(alpha=1, linestyle='solid')  
+    if args.verbose:
+        send_figure(error, msg_error)
+        
+    for t in range(args.t_0,olg.T):
+        olg.update_government(t, 1)
 
-   # for _ in range(args.niter_steady):
-   #     olg.update_steady_state()
-   # olg.create_guess(t_0=olg.T-50,steady_start = olg.T-25)
+    government.update(alpha=.1, linestyle='solid')
+    if args.verbose:
+        send_figure(government, msg_government)
+
 
     with open(file_name, 'wb') as f:
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
 
 if not args.verbose:
-    send_figure(aggregate), send_figure(household),send_figure(government)
+    send_figure(aggregate), send_figure(household),send_figure(government), send_figure(error)
