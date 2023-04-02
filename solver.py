@@ -279,11 +279,11 @@ nlp.add_option('max_iter',100)
 x, info= nlp.solve(z_guess)
 
 
-with open(f'solution_{sys.args[1]}.file', 'wb') as f:
+with open(f'solution_{sys.argv[1]}.file', 'wb') as f:
     pickle.dump(x, f,protocol = pickle.HIGHEST_PROTOCOL)
 
 aggregate = Aggregate_plot(olg, t_0 = 0, t_1 = 100, name = 'test')
 aggregate.create(alpha=.5, linestyle='dashed')
 olg = update_optimal_trajectory(olg, x, t_0=1, t_1=t_1)
 aggregate.update(alpha = .5)
-aggregate.fig.savefig(f'aggregates_{sys.args[1]}steps.jpg')
+aggregate.fig.savefig(f'aggregates_{sys.argv[1]}steps.jpg')

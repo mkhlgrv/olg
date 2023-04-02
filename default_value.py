@@ -50,7 +50,7 @@ K_N_initial = K_initial*(1-0.168) # 171312
 I_initial = 22764.5
 I_N_initial = I_initial * (1-0.168)
 I_E_initial = I_initial * 0.168
-C_initial=52311
+C_initial=52311.
 
 # Population scaling
 L_initial = 1/(K_initial**0.35/ (GDP_initial - Y_O[0]))**(1/0.65)
@@ -82,7 +82,7 @@ tax_LS = np.repeat(0.205, MAX_TIME)*A_N
 # Government
 sigma = np.array([np.repeat(0.293, MAX_TIME), np.repeat(0.33, MAX_TIME)])
 Gov_initial = 18394.
-Debt_initial = 9410
+Debt_initial = 9410.
 target_debt_to_gdp = 0.2
 tax_sensitivity = {'VA_lag': 0.7, 'VA': 2.6, 'I': 0.0, 'I_lag': 0.0}
 Deficit_initial = 3035.6
@@ -92,6 +92,7 @@ Deficit_initial = 3035.6
 eta =0.25
 steady_max_iter=5000
 max_iter=500
+max_nfev = 100
 initial = {"price_N":1.,
          "K_N":K_N_initial,
          "L_N":L_N_initial,

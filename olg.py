@@ -12,12 +12,16 @@ import pickle
 import sys
 config.update("jax_enable_x64", True)
 config.update('jax_platform_name', 'cpu')
+import jax.numpy as jnp
 import numpy as np
 from jax import jit, grad, jacfwd, jacrev
 
 from guess_plot import *
 from progress_bar import *
 import default_value as default
+
+from scipy.optimize import least_squares
+from scipy.sparse import csr_matrix
 
 def labor_income_vector(self, s, g, start, end):
     return (1-self.tau_I[start:end]) * (1-(self.tau_rho[start:end] + self.tau_Ins[start:end])/(1+self.tau_rho[start:end] + self.tau_Ins[start:end])) * self.epsilon[s,g,start:end] * self.w[start:end]
@@ -77,7 +81,8 @@ class OLG_model:
                  eta =default.eta,
                  steady_max_iter=default.steady_max_iter,
                  max_iter=default.max_iter,
-                 steady_guess=default.steady_guess):
+                 steady_guess=default.steady_guess,
+                 max_nfev = default.max_nfev):
         """
         OLG model
         :param G: number of generations, default is 110
@@ -124,7 +129,7 @@ class OLG_model:
         # Taxation
         self.tau_I,  self.tau_pi, self.tau_VA,self.tau_Ins, self.tau_rho, self.tau_O, self.tax_LS =  tau_I, tau_pi,tau_VA,tau_Ins, tau_rho, tau_O, tax_LS
         self.tax_sensitivity, self.target_debt_to_gdp = tax_sensitivity, target_debt_to_gdp
-        self.target_tau_VA = tau_VA
+        self.target_tau_VA = tau_VA[0]
         
         # Production
         self.psi, self.alpha, self.delta, self.A = psi, alpha, delta, A
@@ -225,19 +230,22 @@ class OLG_model:
                            for g in range(self.T-1, self.G+self.T-1) 
                            for s in range(2)])
         
+        self.N_epsilon = np.array([np.sum([self.N[s,g,t]*self.epsilon[s,g,t] 
+                                for g in range(t, self.G+t) 
+                                for s in range(2)]) for t in range(self.max_time)])
+        
         self.potential_growth = np.concatenate(([1.],
                                                (self.N[:,:,1:self.max_time]*self.epsilon[:,:,1:self.max_time]).sum(axis=(0,1))*self.A[0,1:]/\
                                                ((self.N[:,:,0]*self.epsilon[:,:,0]).sum(axis=(0,1)))))
         
         self.working_households = np.array([(self.N[:, :self.max_time, t]*self.l[:, :, t]*self.w[t]).sum(axis=(0,1)) for t in range(self.max_time)])
         
-        self.history = {t:[] for t in range(self.max_time)}
+        self.history = []
+        
+        self.jac_sparsity_flag = False
+        
+        self.max_nfev = max_nfev
 
-        self.error = np.zeros(self.max_time)
-        
-        self.k_diff = np.zeros(self.max_time)
-        
-        self.error_sum_history = []
         
     @property
     def Y(self):
@@ -340,6 +348,8 @@ class OLG_model:
     @property
     def Deficit_to_GDP(self):
         return self.Deficit/self.price/self.GDP
+    
+    
         
         
 #     def copy(self,model):
@@ -380,12 +390,11 @@ class OLG_model:
     def update_working_households(self, t):
         self.working_households[t] = (self.N[:, :self.max_time, t]*self.l[:, :, t]).sum(axis=(0,1))
         
-    def update_government(self, t,i=0):
+    def update_government(self, t):
             
         def reaction_function(self, t):
             if t>0:
                 debt_deviation = (self.Debt_to_GDP[t-1] - self.target_debt_to_gdp)
-                
                 VA = max(0., min((1-self.tax_sensitivity["VA_lag"])*(self.target_tau_VA+\
                                  self.tax_sensitivity["VA"]*debt_deviation) +\
                                  self.tax_sensitivity["VA_lag"]*self.tau_VA[t-1], 0.8))
@@ -564,8 +573,10 @@ class OLG_model:
         Consumption = np.sum([self.c[s,g,self.T]*self.N[s,g,self.T] 
                               for g in range(self.T, self.G+self.T) 
                               for s in range(2)])
-
+        # if self.utility != 'exogenous_labor':
         Labor = np.sum([self.l[s,g,self.T]*self.N[s,g,self.T]*self.epsilon[s,g,self.T] for g in range(self.T, self.G+self.T) for s in range(2)])
+        # else:
+            # Labor = self.Labor[self.T]
         
 
         Assets =  np.sum([self.a[s,g,self.T]*self.N[s,g,self.T] for g in range(self.T, self.G+self.T) for s in range(2)])
@@ -604,12 +615,12 @@ class OLG_model:
                       ,f"{1-self.alpha}*{self.price_E[self.T]} * (k_E_steady/(1-l_N_demand)*{self.A[0,self.T]/self.A[1,self.T]} )**{self.alpha} - w_steady/{self.A[1,self.T]}"
                       ,f"{1/(1+self.r[self.T+1])}*({1-self.tau_pi[self.T+1]}*{self.alpha}* {self.price_E[self.T+1]}* (k_E_steady/(1-l_N_demand)*{self.A[0,self.T]/self.A[1,self.T]})**{self.alpha-1} +{self.tau_pi[self.T+1]} * {self.delta}*price_steady +{self.lmbda_to_price_steady}*price_steady * {1-self.delta}) - {self.lmbda_to_price_steady}*price_steady"
                       ,f"price_N_steady*((k_N_steady/l_N_demand)**{self.alpha} * l_N_demand -{gov})- (1-{self.omega}) * price_steady * ({self.steady_state[-3]/(self.A[0,self.T]*self.steady_state[-2])}+{self.i_steady}*(k_N_steady+k_E_steady) + {oil_costs})"
-                      ,f"price_steady - {self.price_M[self.T]**self.omega}*price_N_steady**({1-self.omega})",
-                      f"{self.target_debt_to_gdp} * (1-{(self.A_growth*self.N_growth)}) * price_steady *  (k_N_steady+k_E_steady)**{self.alpha}+"+\
+                      ,f"price_steady - {self.price_M[self.T]**self.omega}*price_N_steady**({1-self.omega})"
+                      ,f"{self.target_debt_to_gdp} * (1-{(self.A_growth*self.N_growth)}) * price_steady *  (k_N_steady+k_E_steady)**{self.alpha}+"+\
                     f"price_N_steady * {gov} +"+\
                     f"w_steady * {1/ self.working_households[self.T] * (self.sigma[0, self.T]* (self.rho[0, :, self.T]*self.N[0, :, self.T]).sum(axis=(0))+self.sigma[1, self.T] * (self.rho[1, :, self.T]*self.N[1, :, self.T]).sum(axis=(0))) / self.A[0,self.T]}+"+\
                     f"{self.tax_LS_sum[self.T]}*price_steady / {(self.A[0,self.T]*self.steady_state[-2])} +"+\
-                    f"{self.r[self.T]*self.target_debt_to_gdp/(self.A_growth*self.N_growth)} * price_steady * (k_N_steady+k_E_steady)**{self.alpha}"+\
+                    f"{self.r[self.T]*self.target_debt_to_gdp/(self.A_growth*self.N_epsilon[self.T+1]/self.N_epsilon[self.T])} * price_steady * (k_N_steady+k_E_steady)**{self.alpha}"+\
                 "-("+\
                 f"tau_VA_steady * price_steady * {self.steady_state[-3]/(self.A[0,self.T]*self.steady_state[-2])}+"+\
                 f"w_steady *{self.efficient_income_tax[self.T]} / {self.A[0,self.T]}+"+\
@@ -634,7 +645,7 @@ class OLG_model:
         obj_hess = jit(jacrev(jacfwd(obj_jit)))
         
         result = minimize_ipopt(obj_jit, jac=obj_grad, hess=obj_hess, x0=z_guess
-                                , options = {"max_iter":self.steady_max_iter, "print_level":0,
+                                , options = {"max_iter":self.steady_max_iter, "print_level":1,
                                              "check_derivatives_for_naninf":"no"}
                                 , tol=1e-10)
         
@@ -690,22 +701,22 @@ class OLG_model:
             
             
             self.K[0,t] = k_N_steady* Labor_steady * self.A[0,self.T] *\
-                (self.A_growth*self.N_growth)**(t - self.T)
+                (self.A_growth)**(t - self.T)* (self.N_epsilon[t]/self.N_epsilon[self.T])
             self.K[1,t] = k_E_steady* Labor_steady * self.A[0,self.T] *\
-                (self.A_growth*self.N_growth)**(t - self.T)
+                (self.A_growth)**(t - self.T)* (self.N_epsilon[t]/self.N_epsilon[self.T])
             
             self.I[0,t] = self.i_steady * self.K[0,t]
             self.I[1,t] = self.i_steady * self.K[1,t]
             
-            self.L[0,t] = l_N_demand * Labor_steady *(self.N_growth)**(t - self.T)
-            self.L[1,t] = (1-l_N_demand) * Labor_steady *(self.N_growth)**(t - self.T)
+            self.L[0,t] = l_N_demand * Labor_steady * (self.N_epsilon[t]/self.N_epsilon[self.T])
+            self.L[1,t] = (1-l_N_demand) * Labor_steady * (self.N_epsilon[t]/self.N_epsilon[self.T])
             
             self.lmbda[0,t] = self.lmbda_to_price_steady * price_steady
             self.lmbda[1,t] = self.lmbda_to_price_steady * price_steady
             
-            self.Consumption[t] = Consumption_steady*(self.A_growth*self.N_growth)**(t - self.T)
-            self.Labor[t] = Labor_steady*(self.N_growth)**(t - self.T)
-            self.Assets[t] =  Assets_steady*(self.A_growth*self.N_growth)**(t - self.T)
+            self.Consumption[t] = Consumption_steady*(self.A_growth)**(t - self.T)* (self.N_epsilon[t]/self.N_epsilon[self.T])
+            self.Labor[t] = Labor_steady* (self.N_epsilon[t]/self.N_epsilon[self.T])
+            self.Assets[t] =  Assets_steady*(self.A_growth)**(t - self.T)* (self.N_epsilon[t]/self.N_epsilon[self.T])
             
             
 
@@ -727,7 +738,7 @@ class OLG_model:
         self.l_demand[1,t_0:steady_start] = np.linspace(self.l_demand[1,t_0-1], self.l_demand[1,steady_start],\
                                                   steady_start-t_0,endpoint=False)
 
-        self.w[t_0:steady_start] = np.linspace(self.w[t_0-1], self.w[steady_start]/self.A[0, steady_start], steady_start-t_0,endpoint=False)*self.A[0, t_0:steady_start]
+        self.w[t_0:steady_start] = np.linspace(self.w[t_0-1]/self.A[0, t_0-1], self.w[steady_start]/self.A[0, steady_start], steady_start-t_0,endpoint=False)*self.A[0, t_0:steady_start]
         self.price_N[t_0:steady_start] = np.linspace(self.price_N[t_0-1], self.price_N[steady_start], steady_start-t_0,endpoint=False)
         self.price[t_0:steady_start] = np.linspace(self.price[t_0-1], self.price[steady_start], steady_start-t_0,endpoint=False)
         self.tau_VA[t_0:steady_start] = np.linspace(self.tau_VA[t_0-1], self.tau_VA[steady_start], steady_start-t_0,endpoint=False)
@@ -746,17 +757,16 @@ class OLG_model:
         # TODO
         # self.Consumption = np.linspace(self.Consumption[0], self.w[steady_start]/self.A[0, steady_start], steady_start,endpoint=False)
                     
-        self.Consumption[t_0:steady_start] = np.linspace(self.Consumption[t_0-1]/(self.A[0, t_0-1]* self.N[:,:,t_0-1].sum()),
-                                                         self.Consumption[steady_start]/(self.A[0, steady_start]* self.N[:,:,steady_start].sum()), steady_start-t_0,endpoint=False)*\
-                                            (self.A[0, t_0:steady_start]* self.N[:,:,t_0:steady_start].sum(axis=(0,1)))
-        if self.utility != 'exogenous_labor':
+        self.Consumption[t_0:steady_start] = np.linspace(self.Consumption[t_0-1]/(self.A[0, t_0-1]* self.N_epsilon[t_0]), self.Consumption[steady_start]/(self.A[0, steady_start]* self.N_epsilon[steady_start]), steady_start-t_0,endpoint=False)*\
+                                            (self.A[0, t_0:steady_start]* self.N_epsilon[t_0:steady_start])
+        # if self.utility != 'exogenous_labor':
             
-            self.Labor[t_0:steady_start] = np.linspace(self.Labor[t_0-1]/self.N[:,:,t_0-1].sum(),\
-                                                       self.Labor[steady_start]/self.N[:,:,steady_start].sum(), steady_start-t_0,endpoint=False) * self.N[:,:,t_0:steady_start].sum(axis=(0,1))
+        self.Labor[t_0:steady_start] = np.linspace(self.Labor[t_0-1]/self.N_epsilon[t_0-1],\
+                                                   self.Labor[steady_start]/self.N_epsilon[steady_start], steady_start-t_0,endpoint=False) * self.N_epsilon[t_0:steady_start]
             
-        self.Assets[t_0:steady_start] = np.linspace(self.Assets[t_0-1]/(self.A[0, t_0-1]* self.N[:,:,t_0-1].sum()),
-                                                         self.Assets[steady_start]/(self.A[0, steady_start]* self.N[:,:,steady_start].sum()), steady_start-t_0,endpoint=False)*\
-                                            (self.A[0, t_0:steady_start]* self.N[:,:,t_0:steady_start].sum(axis=(0,1)))
+        self.Assets[t_0:steady_start] = np.linspace(self.Assets[t_0-1]/(self.A[0, t_0-1]* self.N_epsilon[t_0-1]),
+                                                         self.Assets[steady_start]/(self.A[0, steady_start]* self.N_epsilon[steady_start]), steady_start-t_0,endpoint=False)*\
+                                            (self.A[0, t_0:steady_start]* self.N_epsilon[t_0:steady_start])
         
                                                                                                                   
         
@@ -818,14 +828,14 @@ class OLG_model:
         
 
             
-        if self.utility != 'exogenous_labor':
+        # if self.utility != 'exogenous_labor':
             
-            Labor = np.sum([self.l[s,g,t]*self.N[s,g,t]*self.epsilon[s,g,t] 
-                                    for g in range(t, self.G+t) 
-                                    for s in range(2)])
+        Labor = np.sum([self.l[s,g,t]*self.N[s,g,t]*self.epsilon[s,g,t] 
+                                for g in range(t, self.G+t) 
+                                for s in range(2)])
                 
-        else:
-            Labor = self.Labor[t]
+        # else:
+        #     Labor = self.Labor[t]
         
         self.update_working_households(t) 
         
@@ -843,126 +853,174 @@ class OLG_model:
             self.Labor[t] = Labor
             self.Assets[t] = Assets
         
-    def evaluate_guess(self, t, t_0=1):
+    def evaluate_guess(self, t_0, t_1):
+        class JAX_OLG():
+            def copy_from(self, model):
+                self.price_M = jnp.array(model.price_M).copy()
+                self.A = jnp.array(model.A).copy()
+                self.Labor = jnp.array(model.Labor).copy()
+                self.r = jnp.array(model.r).copy()
+                self.tau_pi = jnp.array(model.tau_pi).copy()
+                self.Gov = jnp.array(model.Gov).copy()
+                self.Consumption = jnp.array(model.Consumption).copy()
+                self.psi_O =jnp.array(model.psi_O).copy()
+                self.Y_O = jnp.array(model.Y_O).copy()
+
+        static = JAX_OLG()
+
+        static.copy_from(model = self)    
         
-       # self.L[:,t_0:self.T] = self.l_demand[:,t_0:self.T]*self.Labor[t_0:self.T]
+        def equilibrium(z,  t_0=t_0,t_1 = t_1, self=self):
+            period = t_1 - t_0
 
-       # self.K[0,(t_0+1):(self.T+1)] = self.k[0,(t_0+1):(self.T+1)]*self.Labor[(t_0+1):(self.T+1)]*self.A[0,(t_0+1):(self.T+1)]
-       # self.K[1,(t_0+1):(self.T+1)] = self.k[1,(t_0+1):(self.T+1)]*self.Labor[(t_0+1):(self.T+1)]*self.A[0,(t_0+1):(self.T+1)] # тут 0, а не 1!
+            # border conditions ( from t = t_0 to 
 
-       # self.I[:,t_0:self.T] = self.i[:,t_0:self.T]*self.K[:,t_0:self.T]
+            k = jnp.array(self.k).copy()
+            k = k.at[:, (t_0+1):(t_1+1)].set(z[:(period*2)].reshape(2, -1))
 
-        
+            i = jnp.array(self.i).copy()
+            i = i.at[:, t_0:t_1].set(z[(period*2):(period*4)].reshape(2, -1))
 
-        z_guess = np.array([self.i[0,t],self.k[0,t+1],self.l_demand[0,t],
-                       self.lmbda_to_price[0,t], self.i[1,t],self.k[1,t+1],
-                       self.lmbda_to_price[1,t],
-                       self.w[t], self.price_N[t], self.price[t]])
+            l_demand = jnp.array(self.l_demand).copy()
+            l_demand = l_demand.at[0, t_0:t_1].set(z[(period*4):(period*5)])
+            l_demand = l_demand.at[1, t_0:t_1].set(1 - z[(period*4):(period*5)])
 
+            lmbda_to_price = jnp.array(self.lmbda_to_price).copy()
+            lmbda_to_price = lmbda_to_price.at[:, t_0:t_1].set(z[(period*5):(period*7)].reshape(2, -1))
 
-        def equilibrium(z, self=self, t = t):
-            i_N, k_N, l_N_demand, lmbda_N_to_price,\
-                i_E, k_E, lmbda_E_to_price,\
-                w, price, price_N = z
-            if t == 0:
-                lag_i = self.initial["I_N"]/self.initial["K_N"], self.initial["I_E"]/self.initial["K_E"]
-                lag_K = self.initial["K_N"], self.initial["K_E"]
-            else:
-                lag_i = self.i[:,t-1]
-                lag_K = self.K[:, t-1]
-            system =(
-              (1-self.alpha)*price_N  * (self.k[0, t]/l_N_demand)**self.alpha - w/self.A[0, t]\
-            )**2+\
-            ( 1 - lmbda_N_to_price* (1-self.psi/2 *(i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1)**2\
-               - self.psi * (i_N/lag_i[0]*self.K[0,t]/lag_K[0]) * \
-                                      (i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1) )-\
-               self.lmbda_to_price[0,t+1]*self.price[t+1]/price*self.psi/(1+self.r[t+1]) *\
-               (self.i[0,t+1]/i_N*k_N*self.A[0, t+1]*self.Labor[t+1]/self.K[0,t] )**2 *\
-            (self.i[0,t+1]/i_N*k_N*self.A[0, t+1]*self.Labor[t+1]/self.K[0,t] -1)
-            )**2+\
-            ( 1/(1+self.r[t+1]) * ((1-self.tau_pi[t+1]) * self.alpha * self.price_N[t+1] *\
-                                          (k_N/l_N_demand)**(self.alpha-1) +\
-                                          self.tau_pi[t+1] * self.delta * self.price[t+1] +\
-                                          self.lmbda_to_price[0, t+1]*self.price[t+1] * (1-self.delta) ) -\
-            lmbda_N_to_price * price\
-            )**2+\
-            ( (1-self.delta)+\
-                       i_N * (1-self.psi / 2 *(i_N/lag_i[0]*self.K[0,t]/lag_K[0] - 1)**2 ) -\
-            k_N*self.A[0, t+1]*self.Labor[t+1]/self.K[0,t]\
-            )**2+\
-            (
-            (1-self.alpha)*self.price_E[t] * (self.k[1, t]/(1-l_N_demand)*self.A[0,t]/self.A[1,t])**self.alpha - w/ self.A[1, t] 
-            )**2+\
-            ( 1- lmbda_E_to_price* (1-self.psi/2 *(i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1)**2\
-               - self.psi * (i_E/lag_i[1]*self.K[1,t]/lag_K[1]) * \
-                                      (i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1) )-\
-               self.lmbda_to_price[1,t+1]*self.price[t+1]/price*self.psi/(1+self.r[t+1]) *\
-               (self.i[1,t+1]/i_E*k_E*self.A[1, t+1]*self.Labor[t+1]/self.K[1,t] )**2 *\
-            (self.i[1,t+1]/i_E*k_E*self.A[1, t+1]*self.Labor[t+1]/self.K[1,t] -1)
-            )**2+\
-            ( 1/(1+self.r[t+1]) * ((1-self.tau_pi[t+1]) * self.alpha * self.price_E[t+1] *\
-                                          (k_E/(1-l_N_demand)*self.A[0,t]/self.A[1,t])**(self.alpha-1) +\
-                                          self.tau_pi[t+1] * self.delta * self.price[t+1] +\
-                                          self.lmbda_to_price[1, t+1]*self.price[t+1] * (1-self.delta) ) -\
-            lmbda_E_to_price * price\
-            )**2+\
-            ((1-self.delta)+\
-                       i_E * (1-self.psi / 2 *(i_E/lag_i[1]*self.K[1,t]/lag_K[1] - 1)**2 ) -\
-            k_E*self.A[1, t+1]*self.Labor[t+1]/self.K[1,t]
-            )**2+\
-            ( price - (self.price_M[t])**self.omega * (price_N)**(1-self.omega)\
-            )**2+\
-            (price_N*((self.k[0,t]/l_N_demand)**self.alpha *l_N_demand\
-            - self.Gov[t]/(self.A[0,t]*self.Labor[t])) - \
-            (1-self.omega) * price * \
-            (self.Consumption[t]/(self.A[0,t]*self.Labor[t]) +\
-            i_N*k_N + i_E*k_E+\
-            self.psi_O[t] * self.Y_O[t]/(self.A[0,t]*self.Labor[t]) )
-             )**2
+            w = jnp.array(self.w).copy()
+            w = w.at[t_0:t_1].set(z[(period*7):(period*8)])
 
-            return system
+            price = jnp.array(self.price).copy()
+            price = price.at[t_0:t_1].set(z[(period*8):(period*9)])
 
-
-
-        obj_jit = jit(equilibrium)
-        obj_grad = jit(jacfwd(obj_jit))
-        obj_hess = jit(jacrev(jacfwd(obj_jit)))
-
-        tol = 1e-5
-        result = minimize_ipopt(obj_jit, jac=obj_grad, hess=obj_hess, x0=z_guess
-                            , options = {"max_iter":self.max_iter, "print_level":0,
-                                         "check_derivatives_for_naninf":"no"}
-                            , tol=tol)
-        if result["success"] and result['fun']<tol:
-            self.last_guess = z_guess 
-            self.guess[t] = self.eta*result["x"] + (1-self.eta)*z_guess
-
-
-        self.history[t].append(result)
-
-        
-    def update_guess(self, t_start, t_end):
-        for t in range(t_start, t_end):
+            price_S = jnp.array([self.price_N.copy(), self.price_E.copy()])
+            price_S = price_S.at[0, t_0:t_1].set(z[(period*9):(period*10)])
             
-            self.i[0,t],self.k[0,t+1],self.l_demand[0,t],\
-                self.lmbda_to_price[0,t], self.i[1,t],self.k[1,t+1],\
-                self.lmbda_to_price[1,t],\
-                self.w[t], self.price_N[t], self.price[t] = self.guess[t]
-            
-            self.l_demand[1,t] = 1- self.l_demand[0,t]
 
-            self.L[:,t] = self.l_demand[:,t]*self.Labor[t]
 
-            self.K[:,t+1] = self.k[:,t+1]*self.Labor[t+1]*self.A[0,t+1]
+            def labor_equation(t, S, self=self):
+                return (1-self.alpha)*price_S[S, t]  * (k[S, t]/l_demand[S, t] * static.A[0,t]/static.A[S, t])**self.alpha - w[t]/static.A[0, t]
 
-            self.I[:,t] = self.i[:,t]*self.K[:,t]
+            def investment_equation(t, S, self=self):
+                return  1 -\
+                        lmbda_to_price[S, t] * (
+                                            1 - self.psi/2 *(
+                                                            i[S, t]/i[S, t-1]*(k[S,t] * static.Labor[t] * static.A[0, t])/\
+                                                                              (k[S,t-1] * static.Labor[t-1] * static.A[0, t-1])
+                                                            - 1
+                                                            )**2\
+                                              - self.psi * (
+                                                            i[S, t]/i[S, t-1]*(k[S,t] * static.Labor[t] * static.A[0, t])/\
+                                                                              (k[S,t-1] * static.Labor[t-1] * static.A[0, t-1])
+                                                            ) * \
+                                                           (
+                                                            i[S, t]/i[S, t-1]*(k[S,t] * static.Labor[t] * static.A[0, t])/\
+                                                                              (k[S,t-1] * static.Labor[t-1] * static.A[0, t-1]) - 1
+                                                           ) 
+                                            )-\
+                       lmbda_to_price[S,t+1]*price[t+1]/price[t]*self.psi/(1+static.r[t+1]) *\
+                       (
+                            i[S,t+1]/i[S,t]*(k[S, t+1]*static.A[0, t+1]*static.Labor[t+1])/\
+                                            (k[S,t] * static.Labor[t] * static.A[0, t])
+                       )**2 *\
+                       (
+                            i[S,t+1]/i[S,t]*(k[S, t+1]*static.A[0, t+1]*static.Labor[t+1])/\
+                                            (k[S,t] * static.Labor[t] * static.A[0, t])
+                            - 1
+                       )
 
-            self.lmbda[:,t] = self.lmbda_to_price[:,t]*self.price[t]
-            
-    def update_error(self):
-        self.error = np.array([item[-1]['fun'] if len(item)>0 else 0 for key, item in self.history.items()])
+            def capital_equation(t, S, self=self):
+                return 1/(1+static.r[t+1]) * (
+                                              (1-static.tau_pi[t+1]) * self.alpha * price_S[S, t+1] *\
+                                              (k[S, t]/l_demand[S, t] * static.A[0,t]/static.A[S, t])**(self.alpha-1) +\
+                                              static.tau_pi[t+1] * self.delta * price[t+1] +\
+                                              lmbda_to_price[S, t+1]*price[t+1] * (1-self.delta) 
+                                            ) -\
+                        lmbda_to_price[S, t] * price[t]
+            def capital_accomodation_equation(t, S, self=self):
+                return (1-self.delta)+\
+                        i[S,t] * (1-self.psi / 2 *(i[S, t]/i[S, t-1]*(k[S,t] * static.Labor[t] * static.A[0, t])/\
+                                                                     (k[S,t-1] * static.Labor[t-1] * static.A[0, t-1])
+                                                   - 1
+                                                  )**2 
+                                 ) -\
+                        k[S,t+1]*static.A[0, t+1]*static.Labor[t+1]/(k[S,t] * static.Labor[t] * static.A[0, t])
+
+
+
+            def final_good_market_equation(t, self=self):
+                return price[t] - (static.price_M[t])**self.omega * (price_S[0, t])**(1-self.omega)
+
+            def intermediate_good_market_equation(t, self=self):
+                return price_S[0,t]*(
+                                        (k[0,t]/l_demand[0,t])**self.alpha *l_demand[0,t] - \
+                                        static.Gov[t]/(static.A[0,t]*static.Labor[t])
+                                    ) - \
+                        (1-self.omega) * price[t] * \
+                        (
+                            (static.Consumption[t] + static.psi_O[t] * static.Y_O[t])/(static.A[0,t]*static.Labor[t]) +\
+                            i[0,t]*k[0,t] + i[1,t]*k[1,t]
+                        )
+
+            def system(t):
+                return  jnp.array([labor_equation(t,  0),
+                        labor_equation(t,  1),
+                        investment_equation(t,  0),
+                        investment_equation(t,  1),
+                        capital_equation(t,  0),
+                        capital_equation(t,  1),
+                        capital_accomodation_equation(t,  0),
+                        capital_accomodation_equation(t,  1),
+                        final_good_market_equation( t),
+                        intermediate_good_market_equation( t)])
+
+
+            return jnp.apply_along_axis(system, 0, jnp.arange(t_0, t_1)).reshape(-1)
+
+        z_guess = self.update_guess(t_0, t_1)
         
-        self.error_sum_history.append(self.error.sum())
+        if not self.jac_sparsity_flag:
+            self.jac_sparsity = csr_matrix(jacfwd(equilibrium)(z_guess))
+            self.jac_sparsity_flag = True
+                
+        result = least_squares(equilibrium, z_guess, jac_sparsity=self.jac_sparsity, tr_solver = 'lsmr', verbose =2, max_nfev = self.max_nfev)
         
-        # self.k_diff = np.array([np.sum([np.diff([step['info']['x'][S] for step in item])**2 for t, item in self.history.items() if len(item)>0], axis=0) for S in (1,3)])
+        self.update_optimal_trajectory(result.x,t_0, t_1) 
+        
+        self.history.append(result)
+
+        
+    def update_guess(self, t_0, t_1):
+        z = np.concatenate([self.k[:, (t_0+1):(t_1+1)].ravel(),
+                      self.i[:, t_0:t_1].ravel(),
+                      self.l_demand[0, t_0:t_1].ravel(),
+                      self.lmbda_to_price[:, t_0:t_1].ravel(),
+                      self.w[t_0:t_1],
+                      self.price[t_0:t_1],
+                      self.price_N[t_0:t_1]
+                     ])
+        return z
+    def update_optimal_trajectory(self, z, t_0, t_1):
+        self.k[0, (t_0+1):(t_1+1)],\
+        self.k[1, (t_0+1):(t_1+1)],\
+        self.i[0, t_0:t_1],\
+        self.i[1, t_0:t_1],\
+        self.l_demand[0, t_0:t_1],\
+        self.lmbda_to_price[0, t_0:t_1],\
+        self.lmbda_to_price[1, t_0:t_1],\
+        self.w[t_0:t_1],\
+        self.price[t_0:t_1],\
+        self.price_N[t_0:t_1] = np.split(z, 10)
+            
+        self.l_demand[1,t_0:t_1] = 1- self.l_demand[0,t_0:t_1]
+
+        self.L[:,t_0:t_1] = self.l_demand[:,t_0:t_1]*self.Labor[t_0:t_1]
+
+        self.K[:,(t_0+1):(t_1+1)] = self.k[:,(t_0+1):(t_1+1)]*self.Labor[(t_0+1):(t_1+1)]*self.A[0,(t_0+1):(t_1+1)]
+
+        self.I[:,t_0:t_1] = self.i[:,t_0:t_1]*self.K[:,t_0:t_1]
+
+        self.lmbda[:,t_0:t_1] = self.lmbda_to_price[:,t_0:t_1]*self.price[t_0:t_1]
+            
 

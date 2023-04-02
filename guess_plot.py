@@ -14,8 +14,8 @@ class Aggregate_plot(Guess_plot):
         self.fig.suptitle(name, fontsize=10)
     def create(self,alpha=1, linestyle='solid', color="black"):
         plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
-        c = self.model.Consumption[self.time]/(self.model.N[:,:,self.time].sum(axis=(0,1))*self.model.A[0,self.time])
-        l = self.model.Labor[self.time]/self.model.N[:,:,self.time].sum(axis=(0,1))
+        c = self.model.Consumption[self.time]/(self.model.N_epsilon[self.time]*self.model.A[0,self.time])
+        l = self.model.Labor[self.time]/self.model.N_epsilon[self.time]
 
         self.ax[0,0].plot(self.model.k[0,self.time], **plt_kwargs, label = r"$k_N$")
         self.ax[1,0].plot(self.model.k[1,self.time], **plt_kwargs, label = r"$k_E$")
@@ -23,10 +23,9 @@ class Aggregate_plot(Guess_plot):
         self.ax[1,1].plot(self.model.i[1,self.time], **plt_kwargs, label = r"$i_E$")
         self.ax[0,2].plot(c, **plt_kwargs, label = r"$c$")
         self.ax[1,2].plot(l, **plt_kwargs, label = r"$l$")
-        self.ax[1,2].plot(self.model.l_demand[0, self.time], alpha=alpha, linestyle=linestyle, label = r"$l^E$", color='tab:blue')
         self.ax[2,0].plot(self.model.w[self.time]/self.model.A[0,self.time], **plt_kwargs, label = r"$\hat{w}$")
         self.ax[2,1].plot(self.model.price[self.time],**plt_kwargs, label = r"$p$")
-        self.ax[2,2].plot(self.model.price[self.time],**plt_kwargs, label = r"$p_N$")
+        self.ax[2,2].plot(self.model.l_demand[0, self.time], **plt_kwargs, label = r"$l_0$")
         for row in self.ax:
             for col in row:
                 col.legend()
@@ -34,8 +33,8 @@ class Aggregate_plot(Guess_plot):
                 
     def update(self,alpha=1, linestyle='solid', color="black"):
         plt_kwargs = {"alpha":alpha, "linestyle":linestyle, "color":color}
-        c = self.model.Consumption[self.time]/(self.model.N[:,:,self.time].sum(axis=(0,1))*self.model.A[0,self.time])
-        l = self.model.Labor[self.time]/self.model.N[:,:,self.time].sum(axis=(0,1))
+        c = self.model.Consumption[self.time]/(self.model.N_epsilon[self.time]*self.model.A[0,self.time])
+        l = self.model.Labor[self.time]/self.model.N_epsilon[self.time]
         
         self.ax[0,0].plot(self.model.k[0,self.time], **plt_kwargs)
         self.ax[1,0].plot(self.model.k[1,self.time], **plt_kwargs)
@@ -43,10 +42,9 @@ class Aggregate_plot(Guess_plot):
         self.ax[1,1].plot(self.model.i[1,self.time], **plt_kwargs)
         self.ax[0,2].plot(c, **plt_kwargs)
         self.ax[1,2].plot(l, **plt_kwargs)
-        self.ax[1,2].plot(self.model.l_demand[0, self.time], alpha=alpha, linestyle=linestyle, color='tab:blue')
         self.ax[2,0].plot(self.model.w[self.time]/self.model.A[0,self.time], **plt_kwargs)
         self.ax[2,1].plot(self.model.price[self.time],**plt_kwargs)
-        self.ax[2,2].plot(self.model.price[self.time],**plt_kwargs)
+        self.ax[2,2].plot(self.model.l_demand[0, self.time], **plt_kwargs)
         for row in self.ax:
             for col in row:
                 col.legend()
@@ -144,35 +142,4 @@ class Gov_plot(Guess_plot):
 
                     
                     
-        
-class Error_plot(Guess_plot):
-    def __init__(self,model,t_0=2, t_1=100, name = ""):
-        super(Error_plot, self).__init__(model, t_0, t_1)
-        self.fig, self.ax = plt.subplots(2,2, figsize = (15,10))
-        self.ax = self.ax.flatten()
-        self.fig.suptitle(name, fontsize=10)
-        self.labels = [[r"Error"], [r"$\sum$Error"]]
-        self.colors = [["black"], ["black"]]
-        
-        
-    @property
-    def series(self):
-        return [[self.model.error[self.time]]
-                 , [self.model.error_sum_history]
-                # [self.model.k_diff[0]]
-                ]
-    def create(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
-        
-        for labels,series,colors, ax in zip(self.labels,self.series,self.colors,  self.ax):
-            for l, s, c in zip(labels, series, colors):
-                ax.plot(s, color = c, **plt_kwargs,label = l)
-            ax.legend()
-                
-    def update(self,alpha=1, linestyle='solid', color="black"):
-        plt_kwargs = {"alpha":alpha, "linestyle":linestyle}
-        
-        for labels,series,colors, ax in zip(self.labels,self.series,self.colors,  self.ax):
-            ax.cla()
-            for l, s, c in zip(labels, series, colors):
-                ax.plot(s, color = c, **plt_kwargs)
+
