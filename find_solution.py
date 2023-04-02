@@ -87,10 +87,11 @@ if args.action == 'o':
             if olg_baseline.G != olg.G:
                 raise Exception("Different number of generations, can't estimate iota")
                 
-            endogenous_iota = np.array([np.nanmean(labor_income_vector(olg_baseline, s, olg_baseline.G-1, 0, olg_baseline.G)/\
-            (olg_baseline.c[s,olg_baseline.G-1, :olg_baseline.G]*\
-             olg_baseline.l[s,olg_baseline.G-1, :olg_baseline.G]**(olg_baseline.upsilon) *\
-             (1+olg_baseline.tau_VA[:olg_baseline.G])*olg_baseline.price[:olg_baseline.G])) for s in range(2)])
+            endogenous_iota = np.array([np.nanmean(labor_income_vector(olg_baseline, s, olg_baseline.T+olg_baseline.G-1, olg_baseline.T, olg_baseline.T+olg_baseline.G)/\
+            (olg_baseline.c[s,olg_baseline.T+olg_baseline.G-1, olg_baseline.T:(olg_baseline.T+olg_baseline.G)]*\
+             olg_baseline.l[s,olg_baseline.T+olg_baseline.G-1, olg_baseline.T:(olg_baseline.T+olg_baseline.G)]**(olg_baseline.upsilon) *\
+             (1+olg_baseline.tau_VA[olg_baseline.T:(olg_baseline.T+olg_baseline.G)])*olg_baseline.price[olg_baseline.T:(olg_baseline.T+olg_baseline.G)])) for s in range(2)])
+            
             olg.iota = endogenous_iota
     
     with warnings.catch_warnings():
