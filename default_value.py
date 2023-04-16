@@ -91,6 +91,7 @@ Deficit_initial = 3035.6
 # Computation
 eta =0.25
 steady_max_iter=5000
+steady_print_level = 3
 max_iter=500
 max_nfev = 100
 initial = {"price_N":1.,

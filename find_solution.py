@@ -105,21 +105,20 @@ if args.action == 'o':
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
     
     olg.update_a_initial()
-    olg.create_guess(t_0=args.t_0_guess,steady_start = olg.T-50)
+    olg.create_guess(t_0=args.t_0_guess,steady_start = olg.T-200)
 else:
     print('unsupported action')
-olg.eta = 0.5
-
-aggregate = Aggregate_plot(olg, t_0 = 0, t_1=olg.T, name = args.output_name)
-household = Household_plot(olg, g_0=30, g_1=150, name = args.output_name)
-government = Gov_plot(olg, t_0 = 0, t_1 = olg.T, name = args.output_name)
-
-aggregate.create(alpha=.5, linestyle='dashed')
-household.create(alpha=.5, linestyle='dashed')
-government.create(alpha=.5, linestyle='dashed')
 
 if args.verbose:
-    
+
+    aggregate = Aggregate_plot(olg, t_0 = 0, t_1=olg.T, name = args.output_name)
+    household = Household_plot(olg, g_0=30, g_1=150, name = args.output_name)
+    government = Gov_plot(olg, t_0 = 0, t_1 = olg.T, name = args.output_name)
+
+    aggregate.create(alpha=.5, linestyle='dashed')
+    household.create(alpha=.5, linestyle='dashed')
+    government.create(alpha=.5, linestyle='dashed')
+
     msg_aggregate, msg_household, msg_government = send_figure(aggregate), send_figure(household),send_figure(government)
     
 
@@ -151,5 +150,5 @@ for i in range(args.niter_transition):
     with open(file_name, 'wb') as f:
         pickle.dump(olg, f,protocol = pickle.HIGHEST_PROTOCOL)
 
-if not args.verbose:
-    send_figure(aggregate), send_figure(household),send_figure(government)
+#if not args.verbose:
+#    send_figure(aggregate), send_figure(household),send_figure(government)
